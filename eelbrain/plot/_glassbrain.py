@@ -38,7 +38,7 @@ DAMAGE.
 import warnings
 
 import nibabel
-from nilearn.image.resampling import get_bounds
+from nilearn.image.resampling import get_bounds, reorder_img
 
 import numpy as np
 
@@ -46,6 +46,8 @@ from .._data_obj import VolumeSourceSpace
 from .._utils.numpy_utils import newaxis
 from ._base import ColorBarMixin, TimeSlicerEF, Layout, EelFigure, brain_data, butterfly_data
 from ._utsnd import Butterfly
+
+import mne
 
 
 # Copied from nilearn.plotting.img_plotting
@@ -200,12 +202,39 @@ class GlassBrain(TimeSlicerEF, ColorBarMixin, EelFigure):
             if ndvar.has_case:
                 ndvar = ndvar.mean('case')
             src = source.get_source_space()
-            img = _stc_to_volume(ndvar, src, dest, mri_resolution, mni305)
+            # img = _stc_to_volume(ndvar, src, dest, mri_resolution, mni305)
+            # if time is not None:
+            #     t0 = time[0]
+            #     imgs = [index_img(img, i) for i in range(len(time))]
+            #     img0 = imgs[0]
+            # else:
+            #     img0 = img
+            #     imgs = t0 = None
+            # # TODO: use mne functions instead of custom one
+            mag = ndvar.norm('space') if ndvar.has_dim('space') else ndvar
+            morph = mne.compute_source_morph(src,
+                                             subject_from=source.subject, subject_to='fsaverage',
+                                             subjects_dir=source.subjects_dir,
+                                             zooms=10,
+                                             spacing=4,
+                                             verbose=False)
             if time is not None:
+                stc_vol = mne.VolSourceEstimate(mag.x, source.vertices[0], time.tmin,
+                                                time.tstep, source.subject)
+                if source.subject == 'fsaverage':
+                    img = stc_vol.as_volume(src, mri_resolution=mri_resolution)
+                else:
+                    img = morph.apply(stc_vol, mri_resolution=mri_resolution, output='nifti1')
                 t0 = time[0]
                 imgs = [index_img(img, i) for i in range(len(time))]
                 img0 = imgs[0]
             else:
+                stc_vol = mne.VolSourceEstimate(mag.x[:, None], source.vertices[0], 0.0,
+                                                0.0, source.subject)
+                if source.subject == 'fsaverage':
+                    img = stc_vol.as_volume(src, mri_resolution=mri_resolution)
+                else:
+                    img = morph.apply(stc_vol, mri_resolution=mri_resolution, output='nifti1')
                 img0 = img
                 imgs = t0 = None
             if draw_arrows:
@@ -215,7 +244,18 @@ class GlassBrain(TimeSlicerEF, ColorBarMixin, EelFigure):
                 else:
                     dir_imgs = []
                     for direction in ndvar.space._directions:
-                        dir_img = _stc_to_volume(ndvar.sub(space=direction), src, dest, mri_resolution, mni305)
+                        if time is not None:
+                            stc_vol = mne.VolSourceEstimate(ndvar.sub(space=direction).x, source.vertices[0], time.tmin,
+                                                            time.tstep, source.subject)
+                        else:
+                            stc_vol = mne.VolSourceEstimate(ndvar.sub(space=direction).x[:, None], source.vertices[0],
+                                                            0.0,
+                                                            0.0, source.subject)
+                        if source.subject == 'fsaverage':
+                            dir_img = stc_vol.as_volume(src, mri_resolution=mri_resolution)
+                        else:
+                            dir_img = morph.apply(stc_vol, mri_resolution=mri_resolution, output='nifti1')
+                        # dir_img = _stc_to_volume(ndvar.sub(space=direction), src, dest, mri_resolution, mni305)
                         if ndvar.has_dim('time'):
                             dir_imgs.append([index_img(dir_img, i) for i in range(len(ndvar.time))])
                         else:
@@ -307,7 +347,7 @@ class GlassBrain(TimeSlicerEF, ColorBarMixin, EelFigure):
 
         if draw_arrows:
             if img0:
-                self.arrow_scale = 7 * np.max(np.abs([vmax, vmin]))
+                self.arrow_scale = 2 * np.max(np.abs([vmax, vmin]))
                 self._add_arrows(0)
         if annotate:
             display.annotate()
@@ -341,6 +381,7 @@ class GlassBrain(TimeSlicerEF, ColorBarMixin, EelFigure):
             data = []
             for k, direction in enumerate(self._ndvar.space._directions):
                 vol = self._dir_imgs[k][t]
+                vol = reorder_img(vol, resample=self.interpolation)
                 try:
                     vol_data = np.squeeze(vol.get_data())
                     data_2d = display_ax.transform_to_2d(vol_data, vol.affine)
@@ -397,6 +438,7 @@ class GlassBrain(TimeSlicerEF, ColorBarMixin, EelFigure):
                     im = display_ax.ax.quiver(x, y, dir_data[0], dir_data[1],
                                               color=color,
                                               scale=self.arrow_scale)
+                    display_ax.add_object_bounds((xmin, xmax, zmin, zmax))
                 else:
                     continue
             ims.append(im)
@@ -619,10 +661,15 @@ def _stc_to_volume(ndvar, src, dest='mri', mri_resolution=False, mni305=False):
     if ndvar.has_dim('space'):
         ndvar = ndvar.norm('space')
     source = ndvar.get_dim('source')
-    if ndvar.has_dim('time'):
-        data = ndvar.get_data(('source', 'time'), mask=0)
-    else:
+    if ndvar.ndim == 1:
         data = ndvar.get_data(('source', newaxis), mask=0)
+    else:
+        dimnames = ndvar.get_dimnames(first='source')
+        data = ndvar.get_data(dimnames, mask=0)
+    # if ndvar.has_dim('time'):
+    #     data = ndvar.get_data(('source', 'time'), mask=0)
+    # else:
+    #     data = ndvar.get_data(('source', newaxis), mask=0)
 
     # check for infinite values and make them zero
     non_finite_mask = np.logical_not(np.isfinite(data))
@@ -677,7 +724,7 @@ def _stc_to_volume(ndvar, src, dest='mri', mri_resolution=False, mni305=False):
     return img
 
 
-def _fast_abs_percentile(ndvar, percentile=80):
+def _fast_abs_percentile(ndvar, percentile=95):
     """A fast version of the percentile of the absolute value.
 
     Parameters
@@ -716,12 +763,19 @@ def _fast_abs_percentile(ndvar, percentile=80):
 
 
 def get_transform(extent, shape):
-    xmin, xmax, zmin, zmax = extent
+    # xmin, xmax, zmin, zmax = extent
+    left, right, bottom, top = extent
+    hshift = 0.5 * np.sign(right - left)
+    vshift = 0.5 * np.sign(top - bottom)
     T = np.eye(3)
-    T[0, 0] = (zmin - zmax) / shape[0]
-    T[0, 2] = zmax
-    T[1, 1] = (xmax - xmin) / shape[1]
-    T[1, 2] = xmin
+    # T[0, 0] = (zmin - zmax) / shape[0]
+    # T[0, 2] = zmax + 0.5 * T[0, 0]
+    # T[1, 1] = (xmax - xmin) / shape[1]
+    # T[1, 2] = xmin + 0.5 * T[1, 1]
+    T[1, 1] = (right - left) / shape[1]
+    T[1, 2] = left + hshift * T[0, 0]
+    T[0, 0] = (bottom-top) / shape[0]
+    T[0, 2] = top + vshift * T[1, 1]
 
     return T
 
