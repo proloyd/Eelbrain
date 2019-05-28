@@ -1,4 +1,3 @@
-# Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
 """
 ANCOVA
 ======
@@ -9,6 +8,7 @@ Based on [1]_, `Exercises
 <http://www.bio.ic.ac.uk/research/crawley/statistics/exercises/R6Ancova.pdf>`_
 (page 8).
 """
+# Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
 from eelbrain import *
 
 y = Var([2, 3, 3, 4,

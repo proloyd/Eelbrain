@@ -168,3 +168,30 @@ def select_epochs(
         return frame
     else:
         run()
+
+
+def load_stcs():
+    """GUI for detecting and loading source estimates
+
+    Notes
+    -----
+    This GUI prompts the user for the directory containing the
+    source estimates, then automatically detects the experimental
+    design, and loads the data into a :class:`Dataset`. The dataset
+    can be added to the IPython session's namespace, or passed on
+    to the statistics GUI.
+
+    See Also
+    --------
+    eelbrain.load.fiff.DatasetSTCLoader : programmatic access
+        to this functionality
+    """
+    from ._wxgui.app import get_app
+    from ._wxgui.load_stcs import STCLoaderFrame, TEST_MODE
+
+    get_app()
+    frame = STCLoaderFrame(None)
+    if TEST_MODE:
+        return frame
+    else:
+        run()

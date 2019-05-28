@@ -220,7 +220,6 @@ Mass-Univariate Statistics
    testnd.corr
    testnd.Vector
    testnd.VectorDifferenceRelated
-   testnd.VectorDifferenceIndependent
 
 By default the tests in this module produce maps of statistical parameters
 along with maps of p-values uncorrected for multiple comparison. Using different
@@ -318,6 +317,7 @@ Plot uniform time-series:
 .. autosummary::
    :toctree: generated
 
+   plot.LineStack
    plot.UTS
    plot.UTSClusters
    plot.UTSStat
@@ -420,7 +420,11 @@ run : bool
     Run the Eelbrain GUI app (default is True for interactive plotting and
     False in scripts).
 
-The behavior can also be changed globally using :func:`configure`:
+The behavior can also be changed globally using :func:`configure`.
+
+By default, Eelbrain plots open in windows with enhance GUI features such as
+copying a figure to the OS clip-board. To plot figures in bare matplotlib
+windows, :func:`configure` Eelbrain with ``eelbrain.configure(frame=False)``.
 
 
 ^^^^^^^^^^^^^^^
@@ -499,6 +503,7 @@ Tools with a graphical user interface (GUI):
 
     gui.select_components
     gui.select_epochs
+    gui.load_stcs
 
 
 .. _gui:
@@ -542,6 +547,7 @@ Formatted Text
 ^^^^^^^^^^^^^^
 
 .. py:module:: fmtxt
+.. py:currentmodule:: eelbrain
 
 The :mod:`fmtxt` submodule provides tools for exporting results. Most eelbrain
 functions and methods that print tables in fact return :mod:`fmtxt` objects,
@@ -578,7 +584,7 @@ data (gradiometer only) with MNE:
 .. autosummary::
    :toctree: generated
 
-   MneExperiment
+   ~pipeline.MneExperiment
    ~_experiment.ROITestResult
 
 .. seealso::

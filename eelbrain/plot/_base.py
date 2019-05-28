@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
 """Framework for figures embedded in a GUI
 
@@ -69,6 +68,7 @@ import math
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from typing import List, Sequence, Union
@@ -177,7 +177,7 @@ def find_axis_params_data(v, label):
 
     Parameters
     ----------
-    v : NDVar | Var | str | scalar
+    v : PlotData | NDVar | Var | str | scalar
         Unit or scale of the axis. See ``unit_format`` dict above for options.
     label : bool | str
         If ``label is True``, try to infer a label from ``v``.
@@ -190,14 +190,23 @@ def find_axis_params_data(v, label):
         Axis label.
     """
     if isinstance(v, str):
+        meas = None
         unit = v
         scale = UNIT_FORMAT.get(v, 1)
     elif isinstance(v, float):
+        meas = None
         scale = v
         unit = None
-    elif isnumeric(v):
-        meas = v.info.get('meas')
-        data_unit = v.info.get('unit')
+    else:
+        if isnumeric(v):
+            meas = v.info.get('meas')
+            data_unit = v.info.get('unit')
+        elif isinstance(v, PlotData):
+            meas = v.meas
+            data_unit = v.unit
+        else:
+            raise TypeError("unit=%s" % repr(v))
+
         if data_unit in DISPLAY_UNIT:
             unit = DISPLAY_UNIT[data_unit]
             scale = UNIT_FORMAT[unit]
@@ -206,18 +215,18 @@ def find_axis_params_data(v, label):
         else:
             scale = 1
             unit = data_unit
-    else:
-        raise TypeError("unit=%s" % repr(v))
 
     if label is True:
         if meas and unit and meas != unit:
-            label = '%s [%s]' % (meas, unit)
+            label = f'{meas} [{unit}]'
         elif meas:
             label = meas
         elif unit:
             label = unit
-        else:
-            label = getattr(v, 'name', None)
+        elif isinstance(v, PlotData):
+            label = v.default_y_label
+        elif isnumeric(v):
+            label = v.name
 
     # ScalarFormatter: disabled because it always used e notation in status bar
     # (needs separate instance because it adapts to data)
@@ -813,7 +822,7 @@ class LayerData:
         elif plot_type == PlotType.IMAGE:
             x = NDVar(self.y.x.data, self.y.dims, self.y.info, self.y.name)
             yield LayerData(x, PlotType.IMAGE)
-            x = NDVar(1. - self.y.x.mask, self.y.dims, name=self.y.name)
+            x = NDVar(1. - self.y.x.mask, self.y.dims, {'meas': 'mask'}, self.y.name)
             yield LayerData(x, PlotType.CONTOUR, {'levels': [0.5], 'colors': ['black']}, bin_func=np.max)
         else:
             raise RuntimeError(f"plot_type={plot_type!r}")
@@ -1079,6 +1088,31 @@ class PlotData:
                 return layer.y
         raise IndexError("No data")
 
+    @property
+    def default_y_label(self):
+        "Y-label in case meas and unit are uninformative"
+        names = {l.y.name for ax in self.plot_data for l in ax}
+        names.discard(None)
+        if len(names) == 1:
+            return names.pop()
+        return None
+
+    @property
+    def meas(self):
+        meass = {l.y.info.get('meas') for ax in self.plot_data for l in ax}
+        meass.discard(None)
+        if len(meass) == 1:
+            return meass.pop()
+        return None
+
+    @property
+    def unit(self):
+        units = {l.y.info.get('unit') for ax in self.plot_data for l in ax}
+        units.discard(None)
+        if len(units) == 1:
+            return units.pop()
+        return None
+
     @LazyProperty
     def data(self):
         "For backwards compatibility with nested list of NDVar"
@@ -1258,6 +1292,8 @@ class EelFigure:
     _can_set_vlim = False
     _can_set_ylim = False
     _can_set_xlim = False
+    _use_frame = None
+    _has_frame = False
 
     def __init__(self, data_desc, layout):
         """Parent class for Eelbrain figures.
@@ -1271,18 +1307,24 @@ class EelFigure:
         """
         name = self.__class__.__name__
         desc = layout.name or data_desc
+        self._title = f'{name}: {desc}' if desc else name
 
-        # find the right frame
-        if CONFIG['eelbrain']:
+        # Only the first time: respect previously set matplotlib backend
+        if EelFigure._use_frame is None:
+            if 'matplotlib.pyplot' in sys.modules:  # matplotlib backend has been set
+                EelFigure._use_frame = not mpl.get_backend().endswith('inline')
+            else:  # matplotlib backend has not been set
+                EelFigure._use_frame = True
+
+        # Use Eelbrain frame or pyplot
+        if EelFigure._use_frame and CONFIG['eelbrain']:
             from .._wxgui import get_app
             from .._wxgui.mpl_canvas import CanvasFrame
             get_app()
-            title = f'{name}: {desc}' if desc else name
-            frame = CanvasFrame(title=title, eelfigure=self, **layout.fig_kwa())
+            frame = CanvasFrame(title=self._title, eelfigure=self, **layout.fig_kwa())
             self._has_frame = True
         else:
             frame = MatplotlibFrame(**layout.fig_kwa())
-            self._has_frame = False
 
         figure = frame.figure
         if layout.title:
@@ -1323,7 +1365,8 @@ class EelFigure:
         self.canvas.mpl_connect('key_release_event', self._on_key_release)
 
     def __repr__(self):
-        return f'<{self._frame.GetTitle()}>'
+        title = self._frame.GetTitle() if self._has_frame else self._title
+        return f'<{title}>'
 
     def _set_axtitle(self, axtitle, data=None, axes=None, names=None, **kwargs):
         """Set axes titles automatically
@@ -1398,7 +1441,7 @@ class EelFigure:
 
         if CONFIG['show'] and self._layout.show:
             self._frame.Show()
-            if CONFIG['eelbrain'] and do_autorun(self._layout.run):
+            if self._has_frame and do_autorun(self._layout.run):
                 from .._wxgui import run
                 run()
 
@@ -1608,10 +1651,10 @@ class EelFigure:
                     if label:
                         self.set_ylabel(label, ax)
 
-    def _configure_yaxis(self, v, label, axes=None):
+    def _configure_yaxis(self, data, label, axes=None):
         if axes is None:
             axes = self._axes
-        formatter, label = find_axis_params_data(v, label)
+        formatter, label = find_axis_params_data(data, label)
         for ax in axes:
             ax.yaxis.set_major_formatter(formatter)
 
@@ -2583,21 +2626,20 @@ class LegendMixin:
             if loc == 'fig':
                 return Legend(handles, labels, *args, **kwargs)
             else:
-                # take care of old legend; remove() not implemented as of mpl 1.3
+                # take care of old legend
                 if self.legend is not None and loc == 'draggable':
-                    self.legend.draggable(True)
+                    self.legend.set_draggable(True)
                 elif self.legend is not None:
-                    self.legend.set_visible(False)
-                    self.legend.draggable(False)
+                    self.legend.remove()
                 elif loc == 'draggable':
                     self.legend = self.figure.legend(handles, labels, loc=1)
-                    self.legend.draggable(True)
+                    self.legend.set_draggable(True)
 
                 if loc != 'draggable':
                     self.legend = self.figure.legend(handles, labels, loc=loc)
                 self.draw()
         elif self.legend is not None:
-            self.legend.set_visible(False)
+            self.legend.remove()
             self.legend = None
             self.draw()
         elif not self.__handles:

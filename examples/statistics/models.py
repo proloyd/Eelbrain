@@ -1,10 +1,10 @@
-# Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
 """
 Model coding
 ============
 
 Illustrates how to inspect coding of regression models.
 """
+# Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
 from eelbrain import *
 
 ds = Dataset()

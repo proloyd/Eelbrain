@@ -1,12 +1,12 @@
 # Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
+import numpy as np
+from numpy.testing import assert_equal, assert_array_equal
+import pytest
+
 from eelbrain import datasets, Celltable, testnd
 from eelbrain._stats import t_contrast
 from eelbrain._stats.stats import t_1samp
 from eelbrain._stats.t_contrast import TContrastRel
-
-from nose.tools import eq_, assert_raises
-import numpy as np
-from numpy.testing import assert_equal, assert_array_equal
 
 
 def test_t_contrast_parsing():
@@ -16,8 +16,7 @@ def test_t_contrast_parsing():
 
     contrast = "sum(a>c, b>c)"
     contrast_ = t_contrast.parse(contrast)
-    eq_(contrast_, ('afunc', np.sum, (('comp', 'a', 'c'),
-                                      ('comp', 'b', 'c'))))
+    assert contrast_ == ('afunc', np.sum, (('comp', 'a', 'c'), ('comp', 'b', 'c')))
     _, cells = t_contrast._t_contrast_rel_properties(contrast_)
     pc, mc = t_contrast._t_contrast_rel_expand_cells(cells, ('a', 'b', 'c'))
     data = t_contrast._t_contrast_rel_data(y, indexes, pc, mc)
@@ -27,8 +26,7 @@ def test_t_contrast_parsing():
 
     contrast = "sum(a>*, b>*)"
     contrast_ = t_contrast.parse(contrast)
-    eq_(contrast_, ('afunc', np.sum, (('comp', 'a', '*'),
-                                      ('comp', 'b', '*'))))
+    assert contrast_ == ('afunc', np.sum, (('comp', 'a', '*'), ('comp', 'b', '*')))
     _, cells = t_contrast._t_contrast_rel_properties(contrast_)
     pc, mc = t_contrast._t_contrast_rel_expand_cells(cells, ('a', 'b', 'c'))
     data = t_contrast._t_contrast_rel_data(y, indexes, pc, mc)
@@ -36,17 +34,18 @@ def test_t_contrast_parsing():
     assert_equal(data['b'], np.arange(3., 6.))
     assert_equal(data['*'], y.mean(0))
 
-    assert_raises(ValueError, t_contrast._t_contrast_rel_expand_cells, cells,
-                  ('a|c', 'b|c', 'c|c'))
+    with pytest.raises(ValueError):
+        t_contrast._t_contrast_rel_expand_cells(cells, ('a|c', 'b|c', 'c|c'))
 
     # test finding cells
     all_cells = (('fondue pot', 'brie'), ('fondue mix', 'brie'),
                  ('fondue pot', 'edam'), ('raclette', 'edam'))
     cells = (('* pot', '*'), ('fondue *', 'brie'))
     pc, mc = t_contrast._t_contrast_rel_expand_cells(cells, all_cells)
-    eq_(pc, set(all_cells[:3]))
-    eq_(mc, {('* pot', '*'): (('fondue pot', 'brie'), ('fondue pot', 'edam')),
-             ('fondue *', 'brie'): (('fondue pot', 'brie'), ('fondue mix', 'brie'))})
+    assert pc == set(all_cells[:3])
+    assert mc == {
+        ('* pot', '*'): (('fondue pot', 'brie'), ('fondue pot', 'edam')),
+        ('fondue *', 'brie'): (('fondue pot', 'brie'), ('fondue mix', 'brie'))}
 
 
 def test_t_contrasts():

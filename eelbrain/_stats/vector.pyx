@@ -21,16 +21,16 @@ ctypedef cnp.float64_t FLOAT64
 
 cdef double r_TOL = 2.220446049250313e-16
 
-cdef extern from "../../dsyevh3C/dsyevh3.c":
+cdef extern from "dsyevh3.c":
     int dsyevh3(double A[3][3], double Q[3][3], double w[3])
 
-cdef extern from "../../dsyevh3C/dsytrd3.c":
+cdef extern from "dsytrd3.c":
     dsytrd3(double A[3][3], double Q[3][3], double d[3], double e[2])
 
-cdef extern from "../../dsyevh3C/dsyevq3.c":
+cdef extern from "dsyevq3.c":
     int dsyevq3(double A[3][3], double Q[3][3], double w[3])
 
-cdef extern from "../../dsyevh3C/dsyevc3.c":
+cdef extern from "dsyevc3.c":
     int dsyevc3(double A[3][3], double w[3])
 
 

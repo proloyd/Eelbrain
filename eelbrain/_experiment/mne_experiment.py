@@ -16,9 +16,11 @@ from itertools import chain, product
 import logging
 import os
 from os.path import basename, exists, getmtime, isdir, join, relpath
+from pathlib import Path
 import re
 import shutil
 import time
+from typing import Union
 import warnings
 
 import numpy as np
@@ -57,7 +59,7 @@ from ..fmtxt import List, Report, Image, read_meta
 from .._stats.stats import ttest_t
 from .._stats.testnd import _MergedTemporalClusterDist
 from .._text import enumeration, plural
-from .._utils import IS_WINDOWS, ask, subp, keydefaultdict, log_level, ScreenHandler, deprecated
+from .._utils import IS_WINDOWS, ask, subp, keydefaultdict, log_level, ScreenHandler
 from .._utils.mne_utils import fix_annot_names, is_fake_mri
 from .definitions import find_dependent_epochs, find_epochs_vars, log_dict_change, log_list_change
 from .epochs import PrimaryEpoch, SecondaryEpoch, SuperEpoch, EpochCollection, assemble_epochs, decim_param
@@ -94,12 +96,12 @@ LOG_FILE_OLD = join('{root}', '.eelbrain.log')
 
 # Allowable parameters
 COV_PARAMS = {'epoch', 'session', 'method', 'reg', 'keep_sample_mean', 'reg_eval_win_pad'}
-
+INV_METHODS = ('MNE', 'dSPM', 'sLORETA', 'eLORETA')
 SRC_RE = re.compile(r'^(ico|vol)-(\d+)(?:-(brainstem))?$')
 inv_re = re.compile(r"^"
                     r"(free|fixed|loose\.\d+|vec)-"  # orientation constraint
                     r"(\d*\.?\d+)-"  # SNR
-                    r"(MNE|dSPM|sLORETA)"  # method
+                    rf"({'|'.join(INV_METHODS)})"  # method
                     r"(?:-((?:0\.)?\d+))?"  # depth weighting
                     r"(?:-(pick_normal))?"
                     r"$")  # pick normal
@@ -391,7 +393,7 @@ class MneExperiment(FileTree):
 
     # Pattern for subject names. The first group is used to determine what
     # MEG-system the data was recorded from
-    subject_re = '(R|S|A|Y|AD|QP)(\d{3,})$'
+    subject_re = r'(R|S|A|Y|AD|QP)(\d{3,})$'
     # MEG-system (legacy variable).
     meg_system = None
 
@@ -903,14 +905,6 @@ class MneExperiment(FileTree):
 
             # Backwards compatibility
             # =======================
-            if cache_state_v < 12:
-                for test, params in cache_state['tests'].items():
-                    try:
-                        params['vars'] = Variables(params['vars'])
-                    except Exception as error:
-                        log.warning("  Test %s: Defective vardef %r", test, params['vars'])
-                        params['vars'] = None
-
             # epochs
             if cache_state_v >= 11:
                 epoch_state_v = epoch_state
@@ -961,9 +955,15 @@ class MneExperiment(FileTree):
                 for name, params in cache_tests.items():
                     if name in tests_state:
                         params['kind'] = tests_state[name]['kind']
-            if cache_state_v < 9:  # 'vars' entry added to all
-                for params in cache_tests.values():
-                    if 'vars' not in params:
+            if cache_state_v < 12:  # 'vars' entry added to all
+                for test, params in cache_tests.items():
+                    if 'vars' in params:
+                        try:
+                            params['vars'] = Variables(params['vars'])
+                        except Exception as error:
+                            log.warning("  Test %s: Defective vardef %r", test, params['vars'])
+                            params['vars'] = None
+                    else:
                         params['vars'] = None
 
             # Find modified definitions
@@ -1402,15 +1402,19 @@ class MneExperiment(FileTree):
             if inv_mtime:
                 return max(evoked_mtime, inv_mtime)
 
-    def _fwd_mtime(self):
+    def _fwd_mtime(self, subject=None, recording=None, fwd_recording=None):
         "The last time at which input files affecting fwd-file changed"
         trans = self.get('trans-file')
         if exists(trans):
             src = self.get('src-file')
             if exists(src):
-                trans_mtime = getmtime(trans)
-                src_mtime = getmtime(src)
-                return max(self._raw_mtime('raw', bad_chs=False), trans_mtime, src_mtime)
+                if fwd_recording is None:
+                    fwd_recording = self._get_fwd_recording(subject, recording)
+                raw_mtime = self._raw_mtime('raw', False, subject, fwd_recording)
+                if raw_mtime:
+                    trans_mtime = getmtime(trans)
+                    src_mtime = getmtime(src)
+                    return max(raw_mtime, trans_mtime, src_mtime)
 
     def _inv_mtime(self):
         fwd_mtime = self._fwd_mtime()
@@ -1419,13 +1423,17 @@ class MneExperiment(FileTree):
             if cov_mtime:
                 return max(cov_mtime, fwd_mtime)
 
-    def _raw_mtime(self, raw=None, bad_chs=True):
+    def _raw_mtime(self, raw=None, bad_chs=True, subject=None, recording=None):
         if raw is None:
             raw = self.get('raw')
         elif raw not in self._raw:
-            raise RuntimeError("raw-mtime with raw=%s" % repr(raw))
+            raise RuntimeError(f"raw-mtime with raw={raw!r}")
         pipe = self._raw[raw]
-        return pipe.mtime(self.get('subject'), self.get('recording'), bad_chs)
+        if subject is None:
+            subject = self.get('subject')
+        if recording is None:
+            recording = self.get('recording')
+        return pipe.mtime(subject, recording, bad_chs)
 
     def _rej_mtime(self, epoch):
         """rej-file mtime for secondary epoch definition
@@ -1553,7 +1561,7 @@ class MneExperiment(FileTree):
         criteria = self._cluster_criteria[self.get('select_clusters')]
         return {'min' + dim: criteria[dim] for dim in data.dims if dim in criteria}
 
-    def _add_vars(self, ds, vardef):
+    def _add_vars(self, ds, vardef: Union[None, str, Variables], groupvars=False):
         """Add vars to the dataset
 
         Parameters
@@ -1562,8 +1570,16 @@ class MneExperiment(FileTree):
             Event dataset.
         vardef : dict | tuple
             Variable definition.
+        groupvars : bool
+            Apply GroupVars in ``self.variables`` (when adding variables to a
+            dataset that does not originate from events, such as TRFs).
         """
-        if isinstance(vardef, str):
+        if groupvars:
+            self._variables.apply(ds, self, group_only=True)
+
+        if vardef is None:
+            return
+        elif isinstance(vardef, str):
             try:
                 vardef = self._tests[vardef].vars
             except KeyError:
@@ -1765,6 +1781,16 @@ class MneExperiment(FileTree):
             return mrisubjects
         else:
             return FileTree.get_field_values(self, field, exclude)
+
+    def _get_fwd_recording(self, subject: str = None, recording: str = None) -> str:
+        if subject is None:
+            subject = self.get('subject')
+        if recording is None:
+            recording = self.get('recording')
+        try:
+            return self._dig_sessions[subject][recording]
+        except KeyError:
+            raise FileMissing(f"Raw data missing for {subject}, session {recording}")
 
     def iter(self, fields='subject', exclude=None, values=None, group=None, progress_bar=None, **kwargs):
         """
@@ -2030,9 +2056,11 @@ class MneExperiment(FileTree):
             Add bad channel information to the Raw. If True, bad channel
             information is retrieved from the bad channels file. Alternatively,
             a list of bad channels can be specified.
-        reject : bool
-            Whether to apply epoch rejection or not. The kind of rejection
-            employed depends on the ``rej`` setting.
+        reject : bool | 'keep'
+            Reject bad trials. If ``True`` (default), bad trials are removed
+            from the Dataset. Set to ``False`` to ignore the trial rejection.
+            Set ``reject='keep'`` to load the rejection (added it to the events
+            as ``'accept'`` variable), but keep bad trails.
         cat : sequence of cell-names
             Only load data for these cells (cells of model).
         decim : int
@@ -2045,7 +2073,7 @@ class MneExperiment(FileTree):
             Keep the :class:`mne.io.Raw` instance in ``ds.info['raw']``
             (default False).
         vardef : str
-            Name of a 2-stage test defining additional variables.
+            Name of a test defining additional variables.
         data : str
             Data to load; 'sensor' to load all sensor data (default);
             'sensor.rms' to return RMS over sensors. Only applies to NDVar
@@ -2063,7 +2091,12 @@ class MneExperiment(FileTree):
             Interpolate channels marked as bad for the whole recording (useful
             when comparing topographies across subjects; default False).
         ...
-            State parameters.
+            Applicable :ref:`state-parameters`:
+
+             - :ref:`state-raw`: preprocessing pipeline
+             - :ref:`state-epoch`: which events to use and time window
+             - :ref:`state-rej`: which trials to use
+
         """
         data = TestDims.coerce(data)
         if not data.sensor:
@@ -2198,10 +2231,7 @@ class MneExperiment(FileTree):
 
         return ds
 
-    def load_epochs_stc(self, subjects=None, baseline=True,
-                        src_baseline=False, cat=None,
-                        keep_epochs=False, morph=False, mask=False,
-                        data_raw=False, vardef=None, decim=None, ndvar=True, **state):
+    def load_epochs_stc(self, subjects=None, baseline=True, src_baseline=False, cat=None, keep_epochs=False, morph=False, mask=False, data_raw=False, vardef=None, decim=None, ndvar=True, reject=True, **state):
         """Load a Dataset with stcs for single epochs
 
         Parameters
@@ -2236,23 +2266,32 @@ class MneExperiment(FileTree):
             Keep the :class:`mne.io.Raw` instance in ``ds.info['raw']``
             (default False).
         vardef : str
-            Name of a 2-stage test defining additional variables.
+            Name of a test defining additional variables.
         decim : int
             Override the epoch decim factor.
         ndvar : bool
             Add the source estimates as :class:`NDVar` named "src" instead of a list of
             :class:`mne.SourceEstimate` objects named "stc" (default True).
+        reject : bool | 'keep'
+            Reject bad trials. If ``True`` (default), bad trials are removed
+            from the Dataset. Set to ``False`` to ignore the trial rejection.
+            Set ``reject='keep'`` to load the rejection (added it to the events
+            as ``'accept'`` variable), but keep bad trails.
         ...
-            State parameters.
+            Applicable :ref:`state-parameters`:
+
+             - :ref:`state-raw`: preprocessing pipeline
+             - :ref:`state-epoch`: which events to use and time window
+             - :ref:`state-rej`: which trials to use
+             - :ref:`state-cov`: covariance matrix for inverse solution
+             - :ref:`state-src`: source space
+             - :ref:`state-inv`: inverse solution
 
         Returns
         -------
         epochs_dataset : Dataset
             Dataset containing single trial data (epochs).
         """
-        if 'sns_baseline' in state:
-            baseline = state.pop('sns_baseline')
-            warnings.warn("The sns_baseline parameter is deprecated, use baseline instead", DeprecationWarning)
         epoch = self._epochs[self.get('epoch')]
         if not baseline and src_baseline and epoch.post_baseline_trigger_shift:
             raise NotImplementedError("src_baseline with post_baseline_trigger_shift")
@@ -2266,7 +2305,7 @@ class MneExperiment(FileTree):
                 raise ValueError(f"morph={morph!r} with group: Source estimates can only be combined after morphing data to common brain model. Set morph=True.")
             dss = []
             for _ in self.iter(group=group):
-                ds = self.load_epochs_stc(None, baseline, src_baseline, ndvar, cat, keep_epochs, morph, mask, False, vardef, decim)
+                ds = self.load_epochs_stc(None, baseline, src_baseline, cat, keep_epochs, morph, mask, False, vardef, decim, ndvar, reject)
                 dss.append(ds)
             return combine(dss)
 
@@ -2285,7 +2324,7 @@ class MneExperiment(FileTree):
         else:
             raise ValueError(f'keep_epochs={keep_epochs!r}')
 
-        ds = self.load_epochs(subject, baseline, sns_ndvar, cat=cat, decim=decim, data_raw=data_raw, vardef=vardef)
+        ds = self.load_epochs(subject, baseline, sns_ndvar, reject=reject, cat=cat, decim=decim, data_raw=data_raw, vardef=vardef)
 
         # load inv
         if src_baseline is True:
@@ -2359,18 +2398,20 @@ class MneExperiment(FileTree):
             Keep the :class:`mne.io.Raw` instance in ``ds.info['raw']``
             (default False).
         ...
-            State parameters.
+            Applicable :ref:`state-parameters`:
+
+             - :ref:`state-raw`: preprocessing pipeline
+             - :ref:`state-epoch`: which events to use and time window
+
         """
         evt_file = self.get('event-file', mkdir=True, subject=subject, **kwargs)
         subject = self.get('subject')
 
         # search for and check cached version
-        raw_mtime = self._raw_mtime(bad_chs=False)
+        raw_mtime = self._raw_mtime(bad_chs=False, subject=subject)
         if exists(evt_file):
             ds = load.unpickle(evt_file)
-            if 'subject' not in ds.info:  # Eelbrain < 0.28
-                ds = None
-            elif ds.info['raw-mtime'] != raw_mtime:
+            if ds.info['raw-mtime'] != raw_mtime:
                 ds = None
         else:
             ds = None
@@ -2383,8 +2424,6 @@ class MneExperiment(FileTree):
             del ds.info['raw']
             ds.info['sfreq'] = raw.info['sfreq']
             ds.info['raw-mtime'] = raw_mtime
-            ds.info['subject'] = subject
-            ds.info['session'] = self.get('session')
 
             # add edf
             if self.has_edf[subject]:
@@ -2398,6 +2437,8 @@ class MneExperiment(FileTree):
         elif data_raw:
             ds.info['raw'] = self.load_raw(add_bads)
 
+        ds.info['subject'] = subject
+        ds.info['session'] = self.get('session')
         if len(self._visits) > 1:
             ds.info['visit'] = self.get('visit')
 
@@ -2441,15 +2482,20 @@ class MneExperiment(FileTree):
             Keep the :class:`mne.io.Raw` instance in ``ds.info['raw']``
             (default False).
         vardef : str
-            Name of a 2-stage test defining additional variables.
+            Name of a test defining additional variables.
         data : str
             Data to load; 'sensor' to load all sensor data (default);
             'sensor.rms' to return RMS over sensors. Only applies to NDVar
             output.
-        model : str (state)
-            Model according to which epochs are grouped into evoked responses.
         ...
-            State parameters.
+            Applicable :ref:`state-parameters`:
+
+             - :ref:`state-raw`: preprocessing pipeline
+             - :ref:`state-epoch`: which events to use and time window
+             - :ref:`state-rej`: which trials to use
+             - :ref:`state-model`: how to group trials into conditions
+             - :ref:`state-equalize_evoked_count`: control number of trials per cell
+
         """
         subject, group = self._process_subject_arg(subjects, kwargs)
         epoch = self._epochs[self.get('epoch')]
@@ -2554,9 +2600,6 @@ class MneExperiment(FileTree):
         ...
             State parameters.
         """
-        if 'sns_baseline' in state:
-            baseline = state.pop('sns_baseline')
-            warnings.warn("The sns_baseline parameter is deprecated, use baseline instead", DeprecationWarning)
         ds = self.load_epochs_stc(subjects, baseline, ndvar=True, morph=morph, mask=mask, **state)
         name = 'srcm' if morph else 'src'
 
@@ -2596,9 +2639,6 @@ class MneExperiment(FileTree):
         ...
             State parameters.
         """
-        if 'sns_baseline' in state:
-            baseline = state.pop('sns_baseline')
-            warnings.warn("The sns_baseline parameter is deprecated, use baseline instead", DeprecationWarning)
         ds = self.load_evoked_stc(subjects, baseline, morph=morph, mask=mask, **state)
         name = 'srcm' if morph else 'src'
 
@@ -2649,19 +2689,25 @@ class MneExperiment(FileTree):
             Keep the :class:`mne.io.Raw` instance in ``ds.info['raw']``
             (default False).
         vardef : str
-            Name of a 2-stage test defining additional variables.
+            Name of a test defining additional variables.
         decim : int
             Override the epoch decim factor.
         ndvar : bool
             Add the source estimates as NDVar named "src" instead of a list of
             :class:`mne.SourceEstimate` objects named "stc" (default True).
         ...
-            State parameters.
-        """
-        if 'sns_baseline' in state:
-            baseline = state.pop('sns_baseline')
-            warnings.warn("The sns_baseline parameter is deprecated, use baseline instead", DeprecationWarning)
+            Applicable :ref:`state-parameters`:
 
+             - :ref:`state-raw`: preprocessing pipeline
+             - :ref:`state-epoch`: which events to use and time window
+             - :ref:`state-rej`: which trials to use
+             - :ref:`state-model`: how to group trials into conditions
+             - :ref:`state-equalize_evoked_count`: control number of trials per cell
+             - :ref:`state-cov`: covariance matrix for inverse solution
+             - :ref:`state-src`: source space
+             - :ref:`state-inv`: inverse solution
+
+        """
         if state:
             self.set(**state)
 
@@ -2694,7 +2740,7 @@ class MneExperiment(FileTree):
             elif len(meg_subjects) > 1:
                 raise ValueError(f"ndvar=True, morph=False with multiple subjects: Can't create ndvars with data from different brains")
             else:
-                self.make_annot(mrisubject=from_subjects[meg_subjects[0]])
+                self.make_annot(subject=meg_subjects[0])
 
         # convert evoked objects
         stcs = []
@@ -2808,7 +2854,7 @@ class MneExperiment(FileTree):
         path = self.make_ica(**state)
         return mne.preprocessing.read_ica(path)
 
-    def load_inv(self, fiff=None, ndvar=False, mask=None, **kwargs):
+    def load_inv(self, fiff=None, ndvar=False, mask=None, **state):
         """Load the inverse operator
 
         Parameters
@@ -2825,10 +2871,17 @@ class MneExperiment(FileTree):
             Remove source labelled "unknown". Can be parcellation name or True,
             in which case the current parcellation is used.
         ...
-            State parameters.
+            Applicable :ref:`state-parameters`:
+
+             - :ref:`state-raw`: preprocessing pipeline
+             - :ref:`state-rej`: which trials to use
+             - :ref:`state-cov`: covariance matrix for inverse solution
+             - :ref:`state-src`: source space
+             - :ref:`state-inv`: inverse solution
+
         """
-        if kwargs:
-            self.set(**kwargs)
+        if state:
+            self.set(**state)
         if mask and not ndvar:
             raise NotImplementedError("mask is only implemented for ndvar=True")
         elif isinstance(mask, str):
@@ -2969,7 +3022,10 @@ class MneExperiment(FileTree):
             Decimate data (default 1, i.e. no decimation; value other than 1
             implies ``preload=True``)
         ...
-            State parameters.
+            Applicable :ref:`state-parameters`:
+
+             - :ref:`state-session`: from which session to load raw data
+             - :ref:`state-raw`: preprocessing pipeline
 
         Notes
         -----
@@ -2977,11 +3033,18 @@ class MneExperiment(FileTree):
         bad channels in the bad channels file.
         """
         pipe = self._raw[self.get('raw', **kwargs)]
-        raw = pipe.load(self.get('subject'), self.get('recording'), add_bads,
-                        preload if decim == 1 else True)
         if decim > 1:
+            preload = True
+        raw = pipe.load(self.get('subject'), self.get('recording'), add_bads, preload)
+        if decim > 1:
+            if ndvar:
+                # avoid warning for downsampling event channel
+                stim_picks = np.empty(0)
+                events = np.empty((0, 3))
+            else:
+                stim_picks = events = None
             sfreq = int(round(raw.info['sfreq'] / decim))
-            raw.resample(sfreq)
+            raw.resample(sfreq, stim_picks=stim_picks, events=events)
 
         if ndvar:
             data = TestDims('sensor')
@@ -3059,9 +3122,10 @@ class MneExperiment(FileTree):
             subject; ``-1`` for the current group. Default is current subject
             (or group if ``group`` is specified).
         reject : bool | 'keep'
-            Reject bad trials. For True, bad trials are removed from the
-            Dataset. For 'keep', the 'accept' variable is added to the Dataset
-            and bad trials are kept.
+            Reject bad trials. If ``True`` (default), bad trials are removed
+            from the Dataset. Set to ``False`` to ignore the trial rejection.
+            Set ``reject='keep'`` to load the rejection (added it to the events
+            as ``'accept'`` variable), but keep bad trails.
         add_bads : False | True | list
             Add bad channel information to the Raw. If True, bad channel
             information is retrieved from the bad channels file. Alternatively,
@@ -3072,7 +3136,7 @@ class MneExperiment(FileTree):
             Keep the :class:`mne.io.Raw` instance in ``ds.info['raw']``
             (default False).
         vardef : str
-            Name of a 2-stage test defining additional variables.
+            Name of a test defining additional variables.
         cat : sequence of cell-names
             Only load data for these cells (cells of model).
         ...
@@ -3291,12 +3355,12 @@ class MneExperiment(FileTree):
         test : None | str
             Test for which to create a report (entry in MneExperiment.tests;
             None to use the test that was specified most recently).
-        tstart : None | scalar
-            Beginning of the time window for finding clusters (default is from
-            the beginning of the epoch).
-        tstop : None | scalar
-            End of the time window for finding clusters (default is to the end
-            of the epoch).
+        tstart : scalar
+            Beginning of the time window for the test in seconds
+            (default is the beginning of the epoch).
+        tstop : scalar
+            End of the time window for the test in seconds
+            (default is the end of the epoch).
         pmin : float | 'tfce' | None
             Kind of test.
         parc : None | str
@@ -3338,10 +3402,6 @@ class MneExperiment(FileTree):
             Test result for the specified test (when performing tests in ROIs,
             an :class:`~_experiment.ROITestResult` object is returned).
         """
-        if 'sns_baseline' in state:
-            baseline = state.pop('sns_baseline')
-            warnings.warn("The sns_baseline parameter is deprecated, use baseline instead", DeprecationWarning)
-
         self.set(test=test, **state)
         data = TestDims.coerce(data, morph=True)
         self._set_analysis_options(data, baseline, src_baseline, pmin, tstart, tstop, parc, mask)
@@ -3898,22 +3958,18 @@ class MneExperiment(FileTree):
     def make_fwd(self):
         """Make the forward model"""
         subject = self.get('subject')
-        recording = self.get('recording')
+        fwd_recording = self._get_fwd_recording(subject)
         with self._temporary_state:
-            try:
-                fwd_session = self._dig_sessions[subject][recording]
-            except KeyError:
-                raise FileMissing(f"Raw data missing for {subject}, session {recording}")
-            dst = self.get('fwd-file', recording=fwd_session)
+            dst = self.get('fwd-file', recording=fwd_recording)
             if exists(dst):
-                if cache_valid(getmtime(dst), self._fwd_mtime()):
+                if cache_valid(getmtime(dst), self._fwd_mtime(subject, fwd_recording=fwd_recording)):
                     return dst
             # get trans for correct visit for fwd_session
             trans = self.get('trans-file')
 
         src = self.get('src-file', make=True)
         pipe = self._raw[self.get('raw')]
-        raw = pipe.load(subject, fwd_session)
+        raw = pipe.load(subject, fwd_recording)
         bem = self._load_bem()
         src = mne.read_source_spaces(src)
 
@@ -3922,15 +3978,11 @@ class MneExperiment(FileTree):
         fwd = mne.make_forward_solution(raw.info, trans, src, bemsol, ignore_ref=True)
         for s, s0 in zip(fwd['src'], src):
             if s['nuse'] != s0['nuse']:
-                raise RuntimeError(
-                    f"The forward solution {basename(dst)} contains fewer "
-                    f"sources than the source space. This could be due to a "
-                    f"corrupted bem file with source outside the inner skull "
-                    f"surface.")
+                raise RuntimeError(f"The forward solution {basename(dst)} contains fewer sources than the source space. This could be due to a corrupted bem file with sources outside of the inner skull surface.")
         mne.write_forward_solution(dst, fwd, True)
         return dst
 
-    def make_ica_selection(self, epoch=None, decim=None, **state):
+    def make_ica_selection(self, epoch=None, decim=None, session=None, **state):
         """Select ICA components to remove through a GUI
 
         Parameters
@@ -3942,6 +3994,10 @@ class MneExperiment(FileTree):
             Downsample data for visualization (to improve GUI performance;
             for raw data, the default is ~100 Hz, for epochs the default is the
             epoch setting).
+        session : str | list of str
+            One or more sessions for which to plot the raw data (this parameter
+            can not be used together with ``epoch``; default is the session in
+            the current state).
         ...
             State parameters.
 
@@ -3964,11 +4020,15 @@ class MneExperiment(FileTree):
         with self._temporary_state, warnings.catch_warnings():
             warnings.filterwarnings('ignore', 'The measurement information indicates a low-pass', RuntimeWarning)
             if epoch is None:
-                raw = self.load_raw(raw=pipe.source.name, add_bads=bads)
+                if session is None:
+                    session = self.get('session')
+                raw = pipe.load_concatenated_source_raw(subject, session, self.get('visit'))
                 events = mne.make_fixed_length_events(raw)
                 ds = Dataset()
                 decim = int(raw.info['sfreq'] // 100) if decim is None else decim
                 ds['epochs'] = mne.Epochs(raw, events, 1, 0, 1, baseline=None, proj=False, decim=decim, preload=True)
+            elif session is not None:
+                raise TypeError(f"session={session!r} with epoch={epoch!r}")
             else:
                 ds = self.load_epochs(ndvar=False, epoch=epoch, reject=False, raw=pipe.source.name, decim=decim, add_bads=bads)
         info = ds['epochs'].info
@@ -4094,10 +4154,6 @@ class MneExperiment(FileTree):
         ...
             State parameters.
         """
-        if 'sns_baseline' in state:
-            baseline = state.pop('sns_baseline')
-            warnings.warn("The sns_baseline parameter is deprecated, use baseline instead", DeprecationWarning)
-
         state['model'] = ''
         subject, group = self._process_subject_arg(subjects, state)
         data = TestDims("source", morph=bool(group))
@@ -4190,10 +4246,6 @@ class MneExperiment(FileTree):
         ...
             State parameters.
         """
-        if 'sns_baseline' in state:
-            baseline = state.pop('sns_baseline')
-            warnings.warn("The sns_baseline parameter is deprecated, use baseline instead", DeprecationWarning)
-
         if p == 0.1:
             pmid = 0.05
             pmin = 0.01
@@ -4524,10 +4576,6 @@ class MneExperiment(FileTree):
 
         gui.select_epochs(ds, y_name, path=path, vlim=vlim, mark=eog_sns)
 
-    @deprecated('0.30', make_epoch_selection)
-    def make_rej(self, decim=None, auto=None, overwrite=False, **state):
-        pass
-
     def _need_not_recompute_report(self, dst, samples, data, redo):
         "Check (and log) whether the report needs to be redone"
         desc = self._get_rel('report-file', 'res-dir')
@@ -4570,12 +4618,12 @@ class MneExperiment(FileTree):
         pmin : None | scalar, 1 > pmin > 0 | 'tfce'
             Equivalent p-value for cluster threshold, or 'tfce' for
             threshold-free cluster enhancement.
-        tstart : None | scalar
-            Beginning of the time window for finding clusters (default is from
-            the beginning of the epoch).
-        tstop : None | scalar
-            End of the time window for finding clusters (default is to the end
-            of the epoch).
+        tstart : scalar
+            Beginning of the time window for the test in seconds
+            (default is the beginning of the epoch).
+        tstop : scalar
+            End of the time window for the test in seconds
+            (default is the end of the epoch).
         samples : int > 0
             Number of samples used to determine cluster p values for spatio-
             temporal clusters (default 10,000).
@@ -4598,10 +4646,6 @@ class MneExperiment(FileTree):
         --------
         load_test : load corresponding data and tests
         """
-        if 'sns_baseline' in state:
-            baseline = state.pop('sns_baseline')
-            warnings.warn("The sns_baseline parameter is deprecated and will be remove in version 0.30, use baseline instead", DeprecationWarning)
-
         if samples < 1:
             raise ValueError("samples needs to be > 0")
         elif include <= 0 or include > 1:
@@ -4618,6 +4662,7 @@ class MneExperiment(FileTree):
         # start report
         title = self.format('{recording} {test_desc}')
         report = Report(title)
+        report.add_paragraph(self._report_methods_brief(dst))
 
         if isinstance(self._tests[test], TwoStageTest):
             self._two_stage_report(report, data, test, baseline, src_baseline, pmin, samples, tstart, tstop, parc, mask, include)
@@ -4699,12 +4744,12 @@ class MneExperiment(FileTree):
         pmin : None | scalar, 1 > pmin > 0 | 'tfce'
             Equivalent p-value for cluster threshold, or 'tfce' for
             threshold-free cluster enhancement.
-        tstart : None | scalar
-            Beginning of the time window for finding clusters (default is from
-            the beginning of the epoch).
-        tstop : None | scalar
-            End of the time window for finding clusters (default is to the end
-            of the epoch).
+        tstart : scalar
+            Beginning of the time window for the test in seconds
+            (default is the beginning of the epoch).
+        tstop : scalar
+            End of the time window for the test in seconds
+            (default is the end of the epoch).
         samples : int > 0
             Number of samples used to determine cluster p values for spatio-
             temporal clusters (default 1000).
@@ -4724,10 +4769,6 @@ class MneExperiment(FileTree):
         --------
         load_test : load corresponding data and tests (use ``data="source.mean"``)
         """
-        if 'sns_baseline' in state:
-            baseline = state.pop('sns_baseline')
-            warnings.warn("The sns_baseline parameter is deprecated, use baseline instead", DeprecationWarning)
-
         test_obj = self._tests[test]
         if samples < 1:
             raise ValueError("Need samples > 0 to run permutation test.")
@@ -4806,12 +4847,12 @@ class MneExperiment(FileTree):
         pmin : None | scalar, 1 > pmin > 0 | 'tfce'
             Equivalent p-value for cluster threshold, or 'tfce' for
             threshold-free cluster enhancement.
-        tstart : None | scalar
-            Beginning of the time window for finding clusters (default is from
-            the beginning of the epoch).
-        tstop : None | scalar
-            End of the time window for finding clusters (default is to the end
-            of the epoch).
+        tstart : scalar
+            Beginning of the time window for the test in seconds
+            (default is the beginning of the epoch).
+        tstop : scalar
+            End of the time window for the test in seconds
+            (default is the end of the epoch).
         samples : int > 0
             Number of samples used to determine cluster p values for spatio-
             temporal clusters (default 1000).
@@ -4871,12 +4912,12 @@ class MneExperiment(FileTree):
         pmin : None | scalar, 1 > pmin > 0 | 'tfce'
             Equivalent p-value for cluster threshold, or 'tfce' for
             threshold-free cluster enhancement.
-        tstart : None | scalar
-            Beginning of the time window for finding clusters (default is from
-            the beginning of the epoch).
-        tstop : None | scalar
-            End of the time window for finding clusters (default is to the end
-            of the epoch).
+        tstart : scalar
+            Beginning of the time window for the test in seconds
+            (default is the beginning of the epoch).
+        tstop : scalar
+            End of the time window for the test in seconds
+            (default is the end of the epoch).
         samples : int > 0
             Number of samples used to determine cluster p values for spatio-
             temporal clusters (default 1000).
@@ -4931,6 +4972,12 @@ class MneExperiment(FileTree):
         self._report_test_info(info_section, ds, test, res, data)
         report.sign(('eelbrain', 'mne', 'scipy', 'numpy'))
         report.save_html(dst)
+
+    @staticmethod
+    def _report_methods_brief(path):
+        path = Path(path)
+        items = [*path.parts[:-1], path.stem]
+        return List('Methods brief', items[-3:])
 
     def _report_subject_info(self, ds, model):
         """Table with subject information
@@ -5616,7 +5663,7 @@ class MneExperiment(FileTree):
         subp.run_mne_browse_raw(self.get('raw-dir'), self.get('mrisubject'),
                                 self.get('mri-sdir'), modal)
 
-    def set(self, subject=None, **state):
+    def set(self, subject=None, match=True, allow_asterisk=False, **state):
         """
         Set variable values.
 
@@ -5625,12 +5672,22 @@ class MneExperiment(FileTree):
         subject : str
             Set the `subject` value. The corresponding `mrisubject` is
             automatically set to the corresponding mri subject.
+        match : bool
+            For fields with pre-defined values, only allow valid values (default
+            ``True``).
+        allow_asterisk : bool
+            If a value contains ``'*'``, set the value without the normal value
+            evaluation and checking mechanisms (default ``False``).
         ...
             State parameters.
         """
         if subject is not None:
-            state['subject'] = subject
-        FileTree.set(self, **state)
+            if 'group' not in state:
+                state['subject'] = subject
+                subject = None
+        FileTree.set(self, match, allow_asterisk, **state)
+        if subject is not None:
+            FileTree.set(self, match, allow_asterisk, subject=subject)
 
     def _post_set_group(self, _, group):
         if group == '*' or group not in self._groups:
@@ -5652,7 +5709,7 @@ class MneExperiment(FileTree):
             loose constraint).
         snr : scalar
             SNR estimate for regularization (default 3).
-        method : 'MNE' | 'dSPM' | 'sLORETA'
+        method : 'MNE' | 'dSPM' | 'sLORETA' | 'eLORETA'
             Inverse method.
         depth : None | float [0, 1]
             Depth weighting (default ``None`` to use mne default 0.8; ``0`` to
@@ -5677,7 +5734,7 @@ class MneExperiment(FileTree):
         if snr <= 0:
             raise ValueError("snr=%r" % (snr,))
 
-        if method not in ('MNE', 'dSPM', 'sLORETA'):
+        if method not in INV_METHODS:
             raise ValueError("method=%r" % (method,))
 
         items = [ori, '%g' % snr, method]
@@ -5717,7 +5774,7 @@ class MneExperiment(FileTree):
         if snr <= 0:
             raise ValueError('inv=%r (snr=%r)' % (inv, snr))
 
-        if method not in ('MNE', 'dSPM', 'sLORETA'):
+        if method not in INV_METHODS:
             raise ValueError("inv=%r (method=%r)" % (inv, method))
 
         if depth is not None:
@@ -6117,22 +6174,19 @@ class MneExperiment(FileTree):
 
         # pipe-specific
         if isinstance(pipe, RawICA):
-            subjects = []
-            statuses = []
-            for s in self:
-                subjects.append(s)
+            table = fmtxt.Table('lrr')
+            table.cells('Subject', 'n components', 'reject')
+            table.midrule()
+            for subject in self:
+                table.cell(subject)
                 filename = self.get('ica-file')
                 if exists(filename):
                     ica = self.load_ica()
-                    status = f"{len(ica.exclude)} components rejected"
+                    table.cells(ica.n_components_, len(ica.exclude))
                 else:
-                    status = "No ICA-file"
-                statuses.append(status)
-            ds = Dataset()
-            ds['subject'] = Factor(subjects)
-            ds['status'] = Factor(statuses)
+                    table.cells("No ICA-file", '')
             print()
-            print(ds)
+            print(table)
 
     def show_reg_params(self, asds=False, **kwargs):
         """Show the covariance matrix regularization parameters

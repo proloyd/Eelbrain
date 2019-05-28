@@ -1,4 +1,3 @@
-# Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
 """
 Align datasets
 ==============
@@ -6,6 +5,7 @@ Align datasets
 Shows how to combine information from two datasets describing the same cases,
 but not necessarily in the same order.
 """
+# Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
 import random
 import string
 

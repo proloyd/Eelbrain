@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
 """I/O for MNE"""
 from collections import Iterable
@@ -1131,7 +1130,7 @@ def stc_ndvar(stc, subject, src, subjects_dir=None, method=None, fixed=None,
     subjects_dir : None | str
         The path to the subjects_dir (needed to locate the source space
         file).
-    method : 'MNE' | 'dSPM' | 'sLORETA'
+    method : 'MNE' | 'dSPM' | 'sLORETA' | 'eLORETA'
         Source estimation method (optional, used for generating info).
     fixed : bool
         Source estimation orientation constraint (optional, used for generating
@@ -1187,9 +1186,9 @@ def stc_ndvar(stc, subject, src, subjects_dir=None, method=None, fixed=None,
         if connectivity == 'link-midline':
             ss._link_midline()
         elif connectivity != '':
-            raise ValueError("connectivity=%s" % repr(connectivity))
+            raise ValueError(f"connectivity={connectivity!r}")
     elif connectivity is not None:
-        raise TypeError("connectivity=%s" % repr(connectivity))
+        raise TypeError(f"connectivity={connectivity!r}")
     # assemble dims
     dims = [ss, time]
     if is_vector:
@@ -1201,20 +1200,16 @@ def stc_ndvar(stc, subject, src, subjects_dir=None, method=None, fixed=None,
     info = {}
     if fixed is False:
         info['meas'] = 'Activation'
-        if method == 'MNE' or method == 'dSPM' or method == 'sLORETA':
+        if method:
             info['unit'] = method
-        elif method is not None:
-            raise ValueError("method=%s" % repr(method))
     elif fixed is True:
         info['meas'] = 'Current Estimate'
         if method == 'MNE':
             info['unit'] = 'A'
-        elif method == 'dSPM' or method == 'sLORETA':
-            info['unit'] = '%s(A)' % method
-        elif method is not None:
-            raise ValueError("method=%s" % repr(method))
+        elif method:
+            info['unit'] = method
     elif fixed is not None:
-        raise ValueError("fixed=%s" % repr(fixed))
+        raise ValueError(f"fixed={fixed!r}")
 
     return NDVar(x, dims, info, name)
 

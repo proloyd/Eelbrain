@@ -658,4 +658,20 @@ def repmeas(y, x, match, sub=None, ds=None):
             key = as_legal_dataset_key(cellname(cell, '_'))
             out[key] = ct.data[cell]
 
+    # Transfer other variables in ds that are compatible with the rm-structure
+    if ds is not None:
+        reference_cell = ct.cells[0]
+        for k, v in ds.items():
+            if k in out:
+                continue
+            elif not isuv(v):
+                continue
+            try:
+                values = ct._align(v, True)
+            except ValueError:  # aggregating failed
+                continue
+            reference_v = values.pop(reference_cell)
+            if all(np.all(vi == reference_v) for vi in values.values()):
+                out[k] = reference_v
+
     return out

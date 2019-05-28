@@ -37,7 +37,7 @@ These are elementary effects in a Model, and identified by :func:`is_effect`
 from collections import Iterable, Iterator, OrderedDict, Sequence
 from copy import deepcopy
 from functools import partial
-from itertools import chain, product, zip_longest
+from itertools import chain, product, repeat, zip_longest
 from keyword import iskeyword
 from math import ceil, log
 from numbers import Integral, Number
@@ -66,6 +66,7 @@ from scipy.spatial.distance import cdist, pdist, squareform
 from . import fmtxt, _info
 from ._exceptions import DimensionMismatchError, IncompleteModel
 from ._data_opt import gaussian_smoother
+from ._text import enumeration
 from ._utils import (
     intervals, ui, LazyProperty, n_decimals, natsorted)
 from ._utils.numpy_utils import (
@@ -141,10 +142,10 @@ def cellname(cell, delim=' '):
 
 
 def longname(x):
-    if getattr(x, 'name', None) is not None:
-        return x.name
-    elif isnumeric(x) and 'longname' in x.info:
+    if isnumeric(x) and 'longname' in x.info:
         return x.info['longname']
+    elif getattr(x, 'name', None) is not None:
+        return x.name
     elif np.isscalar(x):
         return repr(x)
     return '<unnamed>'
@@ -345,8 +346,7 @@ def assert_has_no_empty_cells(x):
             return
         empty = empty_cells(x)
         if empty:
-            raise NotImplementedError("%s contains empty cells: %s" %
-                                      (dataobj_repr(x), ', '.join(empty)))
+            raise NotImplementedError(f"{dataobj_repr(x)} contains empty cells: {enumeration(empty)}")
     elif isinstance(x, Model):
         empty = []
         for e in x.effects:
@@ -356,10 +356,9 @@ def assert_has_no_empty_cells(x):
                     empty.append((dataobj_repr(e), ', '.join(empty_in_e)))
         if empty:
             items = ['%s (%s)' % pair for pair in empty]
-            raise NotImplementedError("%s contains empty cells in %s" %
-                                      (dataobj_repr(x), ' and '.join(items)))
+            raise NotImplementedError(f"{dataobj_repr(x)} contains empty cells in {enumeration(items)}")
     else:
-        raise TypeError("Need categorial (got %s)" % repr(x))
+        raise TypeError(f"Need categorial, got {x!r}")
 
 
 def hasrandom(x):
@@ -379,8 +378,7 @@ def as_case_identifier(x, ds=None):
     "Coerce input to a variable that can identify each of its cases"
     if isinstance(x, str):
         if ds is None:
-            raise TypeError("Parameter was specified as string, but no Dataset "
-                            "was specified")
+            raise TypeError(f"{x!r}: Parameter was specified as string, but no Dataset was specified")
         x = ds.eval(x)
 
     if isinstance(x, Var):
@@ -390,12 +388,10 @@ def as_case_identifier(x, ds=None):
     elif isinstance(x, Interaction):
         n = len(set(x))
     else:
-        raise TypeError("Need a Var, Factor or Interaction to identify cases, "
-                        "got %s" % repr(x))
+        raise TypeError(f"Need a Var, Factor or Interaction to identify cases, got {x!r}")
 
     if n < len(x):
-        raise ValueError("%s can not serve as a case identifier because it has "
-                         "at least one non-unique value" % x.name.capitalize())
+        raise ValueError(f"Variable can not serve as a case identifier because it has at least one non-unique value: {x!r}")
 
     return x
 
@@ -404,8 +400,7 @@ def asarray(x, kind=None, ds=None):
     "Coerce input to array"
     if isinstance(x, str):
         if ds is None:
-            raise TypeError("Parameter was specified as string, but no Dataset "
-                            "was specified")
+            raise TypeError(f"{x!r} Array parameter was specified as string, but no Dataset was specified")
         x = ds.eval(x)
 
     if isinstance(x, Var):
@@ -418,8 +413,7 @@ def asarray(x, kind=None, ds=None):
         if 'i' in kind and x.dtype.kind == 'b':
             x = x.astype(int)
         else:
-            raise TypeError("Expected array of kind %r, got %r (%s)"
-                            % (kind, x.dtype.kind, x.dtype))
+            raise TypeError(f"Expected array of kind {kind!r}, got {x.dtype.kind!r} ({x.dtype})")
     return x
 
 
@@ -455,9 +449,7 @@ def asdataobject(x, sub=None, ds=None, n=None, return_n=False):
     "Convert to any data object or numpy array."
     if isinstance(x, str):
         if ds is None:
-            err = ("Data object was specified as string, but no Dataset was "
-                   "specified")
-            raise TypeError(err)
+            raise TypeError(f"{x!r}: Data object was specified as string, but no Dataset was specified")
         x = ds.eval(x)
 
     if isdataobject(x):
@@ -474,15 +466,13 @@ def asepochs(x, sub=None, ds=None, n=None, return_n=False):
     "Convert to mne Epochs object"
     if isinstance(x, str):
         if ds is None:
-            err = ("Epochs object was specified as string, but no Dataset was "
-                   "specified")
-            raise TypeError(err)
+            raise TypeError(f"{x!r}: Epochs object was specified as string, but no Dataset was specified")
         x = ds.eval(x)
 
     if isinstance(x, MNE_EPOCHS):
         pass
     else:
-        raise TypeError("Need mne Epochs object, got %s" % repr(x))
+        raise TypeError(f"Need mne Epochs object, got {x!r}")
 
     return _apply_sub(x, sub, n, return_n)
 
@@ -515,14 +505,13 @@ def asindex(x):
 def asmodel(x, sub=None, ds=None, n=None, return_n=False):
     if isinstance(x, str):
         if ds is None:
-            raise TypeError("Model was specified as string, but no Dataset was "
-                            "specified")
+            raise TypeError(f"{x!r}: Model was specified as string, but no Dataset was specified")
         elif sub is not None:
             # need to sub dataset before building model to get right number of
             # df
-            names = set(re.findall('\w+', x))
+            names = set(re.findall(r'\w+', x))
             if isinstance(sub, str):
-                names.update(re.findall('\w+', sub))
+                names.update(re.findall(r'\w+', sub))
             names.intersection_update(ds)
             ds = ds[names].sub(sub)
             sub = None
@@ -539,7 +528,7 @@ def asmodel(x, sub=None, ds=None, n=None, return_n=False):
 def asndvar(x, sub=None, ds=None, n=None, dtype=None, return_n=False):
     if isinstance(x, str):
         if ds is None:
-            raise TypeError("Ndvar was specified as string, but no Dataset was specified")
+            raise TypeError(f"{x!r}: Ndvar was specified as string, but no Dataset was specified")
         x = ds.eval(x)
 
     # convert MNE objects
@@ -563,7 +552,7 @@ def asndvar(x, sub=None, ds=None, n=None, dtype=None, return_n=False):
     elif hasattr(x, '_default_plot_obj'):
         x = x._default_plot_obj()
     else:
-        raise TypeError("NDVar required, got %s" % repr(x))
+        raise TypeError(f"NDVar required, got {x!r}")
 
     x, n = _apply_sub(x, sub, n, return_n=True)
     if dtype is not None and x.x.dtype != dtype:
@@ -575,12 +564,11 @@ def asnumeric(x, sub=None, ds=None, n=None, return_n=False):
     "Var, NDVar"
     if isinstance(x, str):
         if ds is None:
-            raise TypeError("Numeric argument was specified as string, but no "
-                            "Dataset was specified")
+            raise TypeError(f"{x!r}: Numeric argument was specified as string, but no Dataset was specified")
         x = ds.eval(x)
 
     if not isnumeric(x):
-        raise TypeError("Numeric argument required (Var or NDVar), got %s" % repr(x))
+        raise TypeError(f"Numeric argument required (Var or NDVar), got {x!r}")
 
     return _apply_sub(x, sub, n, return_n)
 
@@ -591,14 +579,13 @@ def assub(sub, ds=None, return_n=False):
         return (None, None) if return_n else None
     elif isinstance(sub, str):
         if ds is None:
-            raise TypeError("the sub parameter was specified as string, but no "
-                            "Dataset was specified")
+            raise TypeError(f"sub={sub!r}: parameter was specified as string, but no Dataset was specified")
         sub = ds.eval(sub)
 
     if isinstance(sub, Var):
         sub = sub.x
     elif not isinstance(sub, np.ndarray):
-        raise TypeError(f"sub={sub}: needs to be Var or array")
+        raise TypeError(f"sub={sub!r}: needs to be Var or array")
 
     if return_n:
         n = len(sub) if sub.dtype.kind == 'b' else None
@@ -611,8 +598,7 @@ def asuv(x, sub=None, ds=None, n=None, return_n=False, interaction=False):
     "Coerce to Var or Factor"
     if isinstance(x, str):
         if ds is None:
-            raise TypeError("Parameter was specified as string, but no Dataset "
-                            "was specified")
+            raise TypeError(f"{x!r}: Parameter was specified as string, but no Dataset was specified")
         x = ds.eval(x)
 
     if isuv(x, interaction):
@@ -629,8 +615,7 @@ def asvar(x, sub=None, ds=None, n=None, return_n=False):
     "Coerce to Var"
     if isinstance(x, str):
         if ds is None:
-            raise TypeError("Var was specified as string, but no Dataset was "
-                            "specified")
+            raise TypeError(f"{x!r}: Var was specified as string, but no Dataset was specified")
         x = ds.eval(x)
 
     if not isinstance(x, Var):
@@ -660,7 +645,7 @@ def index_ndim(index):
     elif np.iterable(index):
         return 1
     else:
-        raise TypeError("unknown index type: %s" % repr(index))
+        raise TypeError(f"{index!r}: unknown index type")
 
 
 def _empty_like(obj, n=None, name=None):
@@ -677,8 +662,7 @@ def _empty_like(obj, n=None, name=None):
     elif isdatalist(obj):
         return Datalist([None] * n, name, obj._fmt)
     else:
-        err = "Type not supported: %s" % type(obj)
-        raise TypeError(err)
+        raise TypeError(f"{type(obj)}: Type not supported")
 
 
 def all_equal(a, b, nan_equal=False):
@@ -702,10 +686,9 @@ def all_equal(a, b, nan_equal=False):
         True if all entries in
     """
     if a.__class__ is not b.__class__:
-        raise TypeError("Comparing %s with %s" % (a.__class__, b.__class__))
+        raise TypeError(f"Comparing {a.__class__} with {b.__class__}")
     elif len(a) != len(b):
-        raise ValueError("a and b have different lengths (%i vs %i)" %
-                         (len(a), len(b)))
+        raise ValueError(f"a and b have different lengths ({len(a)} vs {len(b)})")
     elif isinstance(a, Factor):
         if a._codes == b._codes:
             return np.array_equal(a.x, b.x)
@@ -722,7 +705,7 @@ def all_equal(a, b, nan_equal=False):
             buf |= mask
             return buf.all()
     else:
-        raise TypeError("Comparison for %s is not implemented" % a.__class__)
+        raise TypeError(f"Comparison for {a.__class__} is not implemented")
 
 
 # --- sorting ---
@@ -1241,9 +1224,8 @@ class Var:
 
     # numeric ---
     def __neg__(self):
-        x = -self.x
         info = {**self.info, 'longname': f"-{longname(self)}"}
-        return Var(x, info=info)
+        return Var(-self.x, self.name, info=info)
 
     def __pos__(self):
         return self
@@ -1251,124 +1233,103 @@ class Var:
     def __abs__(self):
         return self.abs()
 
+    def _arg_x(self, other):
+        if isnumeric(other):
+            return other.x
+        else:
+            return other
+
     def __add__(self, other):
         if isdataobject(other):
             # ??? should Var + Var return sum or Model?
             return Model((self, other))
-        x = self.x + other
+        x = self.x + self._arg_x(other)
         info = {**self.info, 'longname': f"{longname(self)} + {longname(other)}"}
-        return Var(x, info=info)
+        return Var(x, self.name, info=info)
 
     def __iadd__(self, other):
-        self.x += other.x if isinstance(other, Var) else other
+        self.x += self._arg_x(other)
         return self
 
     def __radd__(self, other):
-        if np.isscalar(other):
-            x = other + self.x
-        elif len(other) != len(self):
-            raise ValueError(f"Objects have different length ({len(other)} vs {len(self)})")
-        else:
-            x = other + self.x
+        x = self._arg_x(other) + self.x
         info = {**self.info, 'longname': f"{longname(other)} + {longname(self)}"}
-        return Var(x, info=info)
+        return Var(x, self.name, info=info)
 
     def __sub__(self, other):
         "subtract: values are assumed to be ordered. Otherwise use .sub method."
-        if np.isscalar(other):
-            x = self.x - other
-        elif len(other) != len(self):
-            raise ValueError(f"Objects have different length ({len(self)} vs {len(other)})")
-        else:
-            x = self.x - other.x
+        x = self.x - self._arg_x(other)
         info = {**self.info, 'longname': f"{longname(self)} - {longname(other)}"}
-        return Var(x, info=info)
+        return Var(x, self.name, info=info)
 
     def __isub__(self, other):
-        self.x -= other.x if isinstance(other, Var) else other
+        self.x -= self._arg_x(other)
         return self
 
     def __rsub__(self, other):
-        if np.isscalar(other):
-            x = other - self.x
-        elif len(other) != len(self):
-            raise ValueError(f"Objects have different length ({len(other)} vs {len(self)})")
-        else:
-            x = other - self.x
+        x = self._arg_x(other) - self.x
         info = {**self.info, 'longname': f"{longname(other)} - {longname(self)}"}
-        return Var(x, info=info)
+        return Var(x, self.name, info=info)
 
     def __mul__(self, other):
         if isinstance(other, Model):
             return Model((self,)) * other
         elif iscategorial(other):
             return Model((self, other, self % other))
-        elif isinstance(other, Var):
-            x = self.x * other.x
-        else:
-            x = self.x * other
+        x = self.x * self._arg_x(other)
         info = {**self.info, 'longname': f"{longname(self)} * {longname(other)}"}
-        return Var(x, info=info)
+        return Var(x, self.name, info=info)
 
     def __imul__(self, other):
-        self.x *= other.x if isinstance(other, Var) else other
+        self.x *= self._arg_x(other)
         return self
 
     def __rmul__(self, other):
-        if np.isscalar(other):
-            x = other * self.x
-        elif len(other) != len(self):
-            raise ValueError(f"Objects have different length ({len(other)} vs {len(self)})")
-        else:
-            x = other * self.x
+        x = self._arg_x(other) * self.x
         info = {**self.info, 'longname': f"{longname(other)} * {longname(self)}"}
-        return Var(x, info=info)
+        return Var(x, self.name, info=info)
 
     def __floordiv__(self, other):
-        if isinstance(other, Var):
-            x = self.x // other.x
-        else:
-            x = self.x // other
+        x = self.x // self._arg_x(other)
         info = {**self.info, 'longname': f"{longname(self)} // {longname(other)}"}
-        return Var(x, info=info)
+        return Var(x, self.name, info=info)
 
     def __ifloordiv__(self, other):
-        self.x //= other.x if isinstance(other, Var) else other
+        self.x //= self._arg_x(other)
         return self
 
     def __mod__(self, other):
         if isinstance(other, Model):
             return Model(self) % other
         elif isinstance(other, Var):
-            x = self.x % other.x
+            pass
         elif isdataobject(other):
             return Interaction((self, other))
-        else:
-            x = self.x % other
+        x = self.x % self._arg_x(other)
         info = {**self.info, 'longname': f"{longname(self)} % {longname(other)}"}
-        return Var(x, info=info)
+        return Var(x, self.name, info=info)
 
     def __imod__(self, other):
-        self.x %= other.x if isinstance(other, Var) else other
+        self.x %= self._arg_x(other)
         return self
 
     def __lt__(self, y):
-        return self.x < y
+        return self.x < self._arg_x(y)
 
     def __le__(self, y):
-        return self.x <= y
+        return self.x <= self._arg_x(y)
 
     def __eq__(self, y):
-        return self.x == y
+        return self.x == self._arg_x(y)
 
     def __ne__(self, y):
-        return self.x != y
+        return self.x != self._arg_x(y)
 
     def __gt__(self, y):
-        return self.x > y
+        return self.x > self._arg_x(y)
 
     def __ge__(self, y):
-        return self.x >= y
+        return self.x >= self._arg_x(y)
 
     def __truediv__(self, other):
         return self.__div__(other)
@@ -1378,7 +1339,7 @@ class Var:
 
     def __div__(self, other):
         if isinstance(other, Var):
-            x = self.x / other.x
+            pass
         elif iscategorial(other):  # separate slope for each level (for ANCOVA)
             dummy_factor = other.as_dummy_complete
             codes = dummy_factor * self.as_effects
@@ -1387,24 +1348,19 @@ class Var:
             codes -= dummy_factor * means
             # create effect
             name = '%s per %s' % (self.name, other.name)
-            return NonbasicEffect(codes, [self, other], name,
-                                  beta_labels=other.dummy_complete_labels)
-        else:
-            x = self.x / other
+            return NonbasicEffect(codes, [self, other], name, beta_labels=other.dummy_complete_labels)
+        x = self.x / self._arg_x(other)
         info = {**self.info, 'longname': f"{longname(self)} / {longname(other)}"}
-        return Var(x, info=info)
+        return Var(x, self.name, info=info)
 
     def __idiv__(self, other):
-        self.x /= other.x if isinstance(other, Var) else other
+        self.x /= self._arg_x(other)
         return self
 
     def __pow__(self, other):
-        if isinstance(other, Var):
-            x = self.x ** other.x
-        else:
-            x = self.x ** other
+        x = self.x ** self._arg_x(other)
         info = {**self.info, 'longname': f"{longname(self)} ** {longname(other)}"}
-        return Var(x, info=info)
+        return Var(x, self.name, info=info)
 
     def __round__(self, n=0):
         return Var(np.round(self.x, n), self.name)
@@ -1423,13 +1379,14 @@ class Var:
             items = [f'{v:g}:{n}' if n > 1 else f'{v:g}' for v, n in ns]
             if nan_str:
                 items.append(nan_str)
-            out = ''
-            for item in items:
-                if len(out) + len(item) >= width - 2:
+            # check whether all items fit
+            n = -2
+            for i, item in enumerate(items):
+                n += 2 + len(item)
+                if n >= width:
                     break
-                out += f', {item}'
             else:
-                return out
+                return ', '.join(items)
         out = f'{x.min():g} - {x.max():g}'
         if nan_str:
             out += f', {nan_str}'
@@ -1437,6 +1394,8 @@ class Var:
 
     def abs(self, name=None):
         "Return a Var with the absolute value."
+        if name is None:
+            name = self.name
         info = {**self.info, 'longname': f"abs({longname(self)})"}
         return Var(np.abs(self.x), name, info=info)
 
@@ -1484,7 +1443,7 @@ class Var:
         "For effect coding"
         return self.x[:, None] - self.x.mean()
 
-    def as_factor(self, labels='%r', name=True, random=False):
+    def as_factor(self, labels='%r', name=None, random=False):
         """Convert the Var into a Factor
 
         Parameters
@@ -1496,9 +1455,8 @@ class Var:
             providing multiple keys in a tuple. A special key 'default' can be
             used to assign values that are not otherwise specified in the
             dictionary (by default this is the empty string ``''``).
-        name : None | True | str
-            Name of the output Factor, ``True`` to keep the current name
-            (default ``True``).
+        name : str
+            Name of the output Factor (default is the current name).
         random : bool
             Whether the Factor is a random Factor (default ``False``).
 
@@ -1533,15 +1491,15 @@ class Var:
             for value in np.unique(self.x):
                 labels_[value] = labels % value
 
-        if name is True:
+        if name is None or name is True:
             name = self.name
 
         return Factor(self.x, name, random, labels=labels_)
 
-    def copy(self, name=True):
+    def copy(self, name=None):
         "Return a deep copy"
         x = self.x.copy()
-        if name is True:
+        if name is None or name is True:
             name = self.name
         return Var(x, name, info=deepcopy(self.info))
 
@@ -1564,9 +1522,9 @@ class Var:
         for v in np.unique(self.x):
             np.equal(self.x, v, index)
             x[index] = np.arange(index.sum())
-        return Var(x)
+        return Var(x, self.name)
 
-    def aggregate(self, x, func=np.mean, name=True):
+    def aggregate(self, x, func=np.mean, name=None):
         """Summarize cases within cells of x
 
         Parameters
@@ -1576,9 +1534,8 @@ class Var:
         func : callable
             Function that converts arrays into scalars, used to summarize data
             within each cell of x.
-        name : None | True | str
-            Name of the output Var, ``True`` to keep the current name (default
-            ``True``).
+        name : str
+            Name of the output (default is the current name).
 
         Returns
         -------
@@ -1595,7 +1552,7 @@ class Var:
             if len(x_cell) > 0:
                 x_out.append(func(x_cell))
 
-        if name is True:
+        if name is None or name is True:
             name = self.name
 
         return Var(x_out, name, info=self.info.copy())
@@ -1660,7 +1617,7 @@ class Var:
             Sequence to be mapped to the new Var.
         values : dict
             Mapping from values in base to values in the new Var.
-        name : None | str
+        name : str
             Name for the new Var.
         default : scalar
             Default value to supply for entries in ``base`` that are not in
@@ -1687,6 +1644,10 @@ class Var:
         func : callable
             A function that when applied to each element in ``base`` returns
             the desired value for the resulting Var.
+        name : str
+            Name for the new Var.
+        info : dict
+            Info for the new Var.
         """
         if isinstance(base, (Var, NDVar)):
             base = base.x
@@ -1741,6 +1702,8 @@ class Var:
         else:
             x = np.log(self.x)
             x /= log(base)
+        if name is None:
+            name = self.name
         info = self.info.copy()
         if base is None:
             info['longname'] = f'log({longname(self)})'
@@ -1760,7 +1723,7 @@ class Var:
         "The smallest value"
         return self.x.min()
 
-    def repeat(self, repeats, name=True):
+    def repeat(self, repeats, name=None):
         """
         Repeat each element ``repeats`` times
 
@@ -1769,11 +1732,10 @@ class Var:
         repeats : int | array of int
             Number of repeats, either a constant or a different number for each
             element.
-        name : None | True | str
-            Name of the output Var, ``True`` to keep the current name (default
-            ``True``).
+        name : str
+            Name of the output Var (default is current name).
         """
-        if name is True:
+        if name is None or name is True:
             name = self.name
         return Var(self.x.repeat(repeats), name, info=self.info.copy())
 
@@ -1786,7 +1748,7 @@ class Var:
         n : int
             number of categories
         name : str
-            Name of the output Factor.
+            Name of the output Var (default is current name).
 
         Examples
         --------
@@ -1809,6 +1771,8 @@ class Var:
         x = np.zeros(len(y), dtype=int)
         for v in values:
             x += y > v
+        if name is None:
+            name = self.name
         return Factor(x, name)
 
     def std(self):
@@ -1864,7 +1828,7 @@ class _Effect:
             specified, old values missing from ``labels`` will raise a
             ``KeyError``.
         name : str
-            Name of the output Var (default is the old object's name).
+            Name of the output Var (default is current name).
         """
         if default is None:
             x = [labels[v] for v in self]
@@ -2331,7 +2295,7 @@ class Factor(_Effect):
             n += len(item) + 2
         return f"{', '.join(items[:i])}{n_cells}"
 
-    def aggregate(self, x, name=True):
+    def aggregate(self, x, name=None):
         """
         Summarize the Factor by collapsing within cells in `x`.
 
@@ -2341,9 +2305,8 @@ class Factor(_Effect):
         ----------
         x : categorial
             A categorial model defining cells to collapse.
-        name : None | True | str
-            Name of the output Factor, ``True`` to keep the current name
-            (default ``True``).
+        name : str
+            Name of the output Factor (default is current name).
 
         Returns
         -------
@@ -2371,14 +2334,14 @@ class Factor(_Effect):
                 else:
                     x_out.append(x_i[0])
 
-        if name is True:
+        if name is None or name is True:
             name = self.name
 
         return Factor(x_out, name, self.random, labels=self._labels)
 
-    def copy(self, name=True, repeat=1, tile=1):
+    def copy(self, name=None, repeat=1, tile=1):
         "A deep copy"
-        if name is True:
+        if name is None or name is True:
             name = self.name
         return Factor(self.x, name, self.random, repeat, tile, self._labels)
 
@@ -2559,7 +2522,7 @@ class Factor(_Effect):
         Parameters
         ----------
         name : str
-            Name of the output Var (default ``None``).
+            Name of the output Factor (default is current name).
 
         Examples
         --------
@@ -2572,12 +2535,14 @@ class Factor(_Effect):
         for i, code in enumerate(self.x):
             x[i] = label_lengths[code]
 
-        if name:
-            longname = name
-        elif self.name:
-            longname = self.name + '.label_length()'
+        if name is None:
+            name = self.name
+            if self.name:
+                longname = self.name + '.label_length()'
+            else:
+                longname = 'label_length'
         else:
-            longname = 'label_length'
+            longname = name
 
         return Var(x, name, info={"longname": longname})
 
@@ -2696,7 +2661,7 @@ class Factor(_Effect):
             table.cell(np.sum(self.x == code))
         return table
 
-    def repeat(self, repeats, name=True):
+    def repeat(self, repeats, name=None):
         """Repeat each element ``repeats`` times
 
         Parameters
@@ -2704,26 +2669,24 @@ class Factor(_Effect):
         repeats : int | array of int
             Number of repeats, either a constant or a different number for each
             element.
-        name : None | True | str
-            Name of the output Var, ``True`` to keep the current name (default
-            ``True``).
+        name : str
+            Name of the output Factor (default is current name).
         """
-        if name is True:
+        if name is None or name is True:
             name = self.name
         return Factor(self.x, name, self.random, repeats, labels=self._labels)
 
-    def tile(self, repeats, name=True):
+    def tile(self, repeats, name=None):
         """Construct a Factor by repeating ``self`` ``repeats`` times
 
         Parameters
         ----------
         repeats : int
             Number of repeats.
-        name : None | True | str
-            Name of the output Var, ``True`` to keep the current name (default
-            ``True``).
+        name : str
+            Name of the output Factor (default is current name).
         """
-        if name is True:
+        if name is None or name is True:
             name = self.name
         return Factor(self.x, name, self.random, tile=repeats, labels=self._labels)
 
@@ -2796,7 +2759,7 @@ class NDVar:
     """
     def __init__(self, x, dims, info={}, name=None):
         # check data shape
-        if (isinstance(dims, Dimension) or dims is Case or isinstance(dims, str)):
+        if isinstance(dims, Dimension) or dims is Case or isinstance(dims, str):
             dims_ = [dims]
         else:
             dims_ = list(dims)
@@ -2931,11 +2894,8 @@ class NDVar:
                     i_add += 1
 
             # find data axes
-            self_axes = self.dimnames
-            if i_add:
-                self_axes += (None,) * i_add
-            other_axes = tuple(name if name in other.dimnames else None
-                               for name in dimnames)
+            self_axes = [*self.dimnames, *repeat(None, i_add)]
+            other_axes = [name if name in other.dimnames else None for name in dimnames]
 
             # find dims
             dims = []
@@ -3204,7 +3164,7 @@ class NDVar:
             An boolean NDVar with the same dimensions as the data can be used
             to find nonzero values in specific elements (if the NDVar has cases
             on a per case basis).
-        *regions*
+        **regions
             Regions over which to aggregate as keywords. 
             For example, to check whether all values between time=0.1 and 
             time=0.2 are non-zero, use ``ndvar.all(time=(0.1, 0.2))``.
@@ -3255,7 +3215,7 @@ class NDVar:
             An boolean NDVar with the same dimensions as the data can be used
             to find nonzero values in specific elements (if the NDVar has cases
             on a per case basis).
-        *regions*
+        **regions
             Regions over which to aggregate. For example, to check for nonzero
             values between time=0.1 and time=0.2, use
             ``ndvar.any(time=(0.1, 0.2))``.
@@ -3407,35 +3367,26 @@ class NDVar:
                 dim_axis = self.get_axis(dim.name)
                 index = FULL_AXIS_SLICE * dim_axis + (axis.x,)
                 x = func(self.x[index], dim_axis)
-                dims = tuple(self.dims[i] for i in range(self.ndim) if i != dim_axis)
+                dims = [self.dims[i] for i in range(self.ndim) if i != dim_axis]
             else:
-                # if the index does not contain all dimensions, numpy indexing
-                # is weird
-                if self.ndim - self.has_case != axis.ndim - axis.has_case:
-                    raise NotImplementedError(
-                        "If the index is not one dimensional, it needs to have "
-                        "the same dimensions as the data.")
                 dims, self_x, index = self._align(axis)
-                if self.has_case:
-                    if axis.has_case:
-                        x = np.array([func(x_[i]) for x_, i in zip(self_x, index)])
-                    else:
-                        index = index[0]
-                        x = np.array([func(x_[index]) for x_ in self_x])
-                    return Var(x, name, info=_info.for_data(x, self.info))
-                elif axis.has_case:
-                    raise IndexError("Index with case dimension can not be "
-                                     "applied to data without case dimension")
-                else:
-                    return func(self_x[index])
+                # move indexed dimensions to the back so they can be flattened
+                src = [ax for ax, n in enumerate(index.shape) if n != 1]
+                n_flatten = len(src)
+                dst = list(range(-n_flatten, 0))
+                x_t = np.moveaxis(self_x, src, dst)
+                x_flat = x_t.reshape((*x_t.shape[:-n_flatten], -1))
+                index_flat = index.ravel()
+                x = func(x_flat[..., index_flat], -1)
+                dims = [dim for i, dim in enumerate(dims) if i not in src]
         elif isinstance(axis, str):
             axis = self._dim_2_ax[axis]
             x = func(self.x, axis=axis)
-            dims = tuple(self.dims[i] for i in range(self.ndim) if i != axis)
+            dims = [self.dims[i] for i in range(self.ndim) if i != axis]
         else:
             axes = tuple(self._dim_2_ax[dim_name] for dim_name in axis)
             x = func(self.x, axes)
-            dims = tuple(self.dims[i] for i in range(self.ndim) if i not in axes)
+            dims = [self.dims[i] for i in range(self.ndim) if i not in axes]
 
         return self._package_aggregated_output(x, dims, _info.for_data(x, self.info), name)
 
@@ -3725,9 +3676,9 @@ class NDVar:
             An boolean NDVar with the same dimensions as the data can be used
             to compute the extrema in specific elements (if the data has a case
             dimension, the extrema are computed for each case).
-        *regions*
-            Regions over which to aggregate. For example, to get the maximum
-            between time=0.1 and time=0.2, use ``ndvar.max(time=(0.1, 0.2))``.
+        **regions
+            Regions over which to aggregate. For example, to get the extrema
+            between 0.1 and 0.2 s, use ``ndvar.extrema(time=(0.1, 0.2))``.
         name : str
             Name of the output NDVar (default is the current name).
 
@@ -3894,8 +3845,7 @@ class NDVar:
             if len(names) != len(self.dims):
                 raise ValueError(f"{names}: ambiguous (more than one unspecified dimension)")
             none_dims = [n for n in self.dimnames if n not in names]
-            return tuple(n if n is not None else none_dims.pop(0) for
-                         n in names)
+            return tuple(n if n is not None else none_dims.pop(0) for n in names)
         else:
             return tuple(names)
 
@@ -4036,7 +3986,7 @@ class NDVar:
             An boolean NDVar with the same dimensions as the data can be used
             to compute the maximum in specific elements (if the data has a case
             dimension, the maximum is computed for each case).
-        *regions*
+        **regions
             Regions over which to aggregate. For example, to get the maximum
             between time=0.1 and time=0.2, use ``ndvar.max(time=(0.1, 0.2))``.
         name : str
@@ -4063,7 +4013,7 @@ class NDVar:
             A boolean NDVar with the same dimensions as the data can be used
             to compute the mean in specific elements (if the data has a case
             dimension, the mean is computed for each case).
-        *regions*
+        **regions
             Regions over which to aggregate. For example, to get the mean
             between time=0.1 and time=0.2, use ``ndvar.mean(time=(0.1, 0.2))``.
         name : str
@@ -4090,7 +4040,7 @@ class NDVar:
             A boolean NDVar with the same dimensions as the data can be used
             to compute the minimum in specific elements (if the data has a case
             dimension, the minimum is computed for each case).
-        *regions*
+        **regions
             Regions over which to aggregate. For example, to get the minimum
             between time=0.1 and time=0.2, use ``ndvar.min(time=(0.1, 0.2))``.
         name : str
@@ -4314,7 +4264,7 @@ class NDVar:
             An boolean NDVar with the same dimensions as the data can be used
             to compute the RMS in specific elements (if the data has a case
             dimension, the RMS is computed for each case).
-        *regions*
+        **regions
             Regions over which to aggregate. For example, to get the RMS
             between time=0.1 and time=0.2, use ``ndvar.rms(time=(0.1, 0.2))``.
         name : str
@@ -4349,8 +4299,7 @@ class NDVar:
         """
         return NDVar(np.sign(self.x), self.dims, self.info, name or self.name)
 
-    def smooth(self, dim, window_size, window='hamming', mode='center',
-               name=None):
+    def smooth(self, dim, window_size=None, window='hamming', mode='center', window_samples=None, name=None):
         """Smooth data by convolving it with a window
 
         Parameters
@@ -4375,6 +4324,11 @@ class NDVar:
               the window.
             - ``right``: sample in the output corresponds to the right edge of
               the window.
+
+        window_samples : scalar
+            Size of the window in samples (this parameter is used to specify
+            window size in array elemnts rather than in units of the dimension;
+            it is mutually exclusive with ``window_size``).
         name : str
             Name for the smoothed NDVar.
 
@@ -4390,32 +4344,36 @@ class NDVar:
 
         >>> std = fwhm / (2 * (sqrt(2 * log(2))))
         """
+        if (window_size is None) == (window_samples is None):
+            desc = "" if window_size is None else f"window_size={window_size!r}, window_samples={window_samples!r}: "
+            raise TypeError(f"{desc}Must specify either window_size or window_samples")
         axis = self.get_axis(dim)
         dim_object = self.get_dim(dim)
         dims = self.dims
         if window == 'gaussian':
             if mode != 'center':
-                raise ValueError("For gaussian smoothing, mode must be "
-                                 "'center'; got mode=%r" % (mode,))
+                raise ValueError(f"mode={mode!r}; for gaussian smoothing, mode must be 'center'")
             elif dim_object._connectivity_type == 'custom':
+                if window_samples is not None:
+                    raise ValueError(f"window_samples for dimension with connectivity not based on adjacency")
                 m = gaussian_smoother(dim_object._distances(), window_size)
             else:
-                raise NotImplementedError("Gaussian smoothing for %s "
-                                          "dimension" % (dim_object.name,))
+                raise NotImplementedError(f"Gaussian smoothing for {dim_object.__class__.__name__} dimension")
             x = np.tensordot(m, self.x, (1, axis))
             if axis:
                 x = x.swapaxes(0, axis)
         elif dim_object._connectivity_type == 'custom':
             raise ValueError(f"window={window}; for {dim_object.__class__.__name__} dimension (must be 'gaussian')")
         else:
-            if dim == 'time':
+            if window_samples:
+                n = window_samples
+            elif dim == 'time':
                 n = int(round(window_size / dim_object.tstep))
+                if not n:
+                    raise ValueError(f"window_size={window_size}: Window too small for sampling rate")
             else:
                 raise NotImplementedError("dim=%r" % (dim,))
             window = scipy.signal.get_window(window, n, False)
-            if not window.size:
-                raise ValueError("window_size=%r: window too small for the "
-                                 "NDVar's sampling rate" % (window_size,))
             window /= window.sum()
             window.shape = (1,) * axis + (n,) + (1,) * (self.ndim - axis - 1)
             if mode == 'center':
@@ -4449,7 +4407,7 @@ class NDVar:
             to compute the standard deviation in specific elements (if the data
             has a case dimension, the standard deviation is computed for each
             case).
-        *regions*
+        **regions
             Regions over which to aggregate. For example, to get the STD
             between time=0.1 and time=0.2, use ``ndvar.std(time=(0.1, 0.2))``.
         name : str
@@ -4667,7 +4625,7 @@ class NDVar:
             An boolean NDVar with the same dimensions as the data can be used
             to compute the sum in specific elements (if the data has a case
             dimension, the sum is computed for each case).
-        *regions*
+        **regions
             Regions over which to aggregate. For example, to get the sum
             between time=0.1 and time=0.2, use ``ndvar.sum(time=(0.1, 0.2))``.
         name : str
@@ -5200,6 +5158,8 @@ class Dataset(OrderedDict):
             return self.get_case(index)
         elif not np.iterable(index):
             raise KeyError("Invalid index for Dataset: %r" % index)
+        elif len(index) == 0:
+            return self.sub(index)
         elif all(isinstance(item, str) for item in index):
             return self.sub(keys=index)
         elif isinstance(index, tuple):
@@ -6236,23 +6196,20 @@ class Dataset(OrderedDict):
         being updated (the expected behavior of .update()).
         """
         if isinstance(ds, Dataset):
-            if ds.n_cases != self.n_cases:
-                raise ValueError("Trying to update dataset with %i cases from "
-                                 "dataset with %i cases" % (self.n_cases, ds.n_cases))
+            if self.n_cases is not None and ds.n_cases != self.n_cases:
+                raise ValueError(f"Trying to update dataset with {self.n_cases} cases from dataset with {ds.n_cases} cases")
 
         if not replace:
-            unequal = {}
+            unequal = []
             for key in set(self).intersection(ds):
                 own = self[key]
                 other = ds[key]
                 if len(own) != len(other):
-                    unequal[key] = 'unequal length'
+                    unequal.append((key, 'unequal length'))
                 elif not np.all(own == other):
-                    unequal[key] = "unequal values"
+                    unequal.append((key, 'unequal values'))
             if unequal:
-                raise ValueError(
-                    "The following variables are present twice but are not "
-                    "equal: %s" % ', '.join('%r (%s)' % item for item in unequal.items()))
+                raise ValueError(f"Inconsistent variables present: {enumeration(f'{name} ({msg})' for name, msg in unequal)}")
 
         super(Dataset, self).update(ds)
 
@@ -7315,11 +7272,6 @@ class Dimension:
         -------
         connectivity : array of int, (n_pairs, 2)
             array of sorted ``[src, dst]`` pairs, with all ``src < dst``.
-
-        See Also
-        --------
-        .set_connectivity() : define the connectivity
-        .neighbors() : Neighboring sensors for each sensor in a dictionary.
         """
         if self._connectivity is None:
             self._connectivity = self._generate_connectivity()
@@ -7517,8 +7469,13 @@ class Space(Dimension):
                 self._axis_label(label))
 
     def _array_index(self, arg):
-        if isinstance(arg, str) and len(arg) == 1:
-            return self._directions.index(arg)
+        if isinstance(arg, str):
+            if len(arg) == 1:
+                return self._directions.index(arg)
+            else:
+                return [self._directions.index(s) for s in arg]
+        elif isinstance(arg, list):
+            return [self._directions.index(s) for s in arg]
         elif isinstance(arg, tuple):
             return slice(*map(self._array_index, arg)) if arg else FULL_SLICE
         elif isinstance(arg, slice):
@@ -7527,7 +7484,7 @@ class Space(Dimension):
                 None if arg.stop is None else self._array_index(arg.stop),
                 arg.step)
         else:
-            return [self._directions.index(s) for s in arg]
+            raise TypeError(f"{arg} is an invalid index for {self.__class__.__name__}")
 
     def _dim_index(self, arg):
         if isinstance(arg, Integral):
@@ -8176,6 +8133,20 @@ class Sensor(Dimension):
                 names.append(name)
         return cls(locs, names, **kwargs)
 
+    @classmethod
+    def from_montage(cls, montage):
+        """Create Sensor dimension from :mod:`mne` :class:`~mne.channels.Montage`
+
+        Parameters
+        ----------
+        montage : str | mne.Montage
+            Montage, or name to load a standard montage (see
+            :func:`mne.channels.read_montage`).
+        """
+        if isinstance(montage, str):
+            montage = mne.channels.read_montage(montage)
+        return cls(montage.pos, montage.ch_names, montage.kind)
+
     def _interpret_proj(self, proj):
         if proj == 'default':
             return self.default_proj2d
@@ -8377,37 +8348,35 @@ class Sensor(Dimension):
         else:
             return None
 
-    def index(self, exclude=None, names=False):
+    def index(self, include=None, exclude=None):
         """Construct an index for specified sensors
 
         Parameters
         ----------
-        exclude : None | list of str, int
+        include : list of str, int
             Sensors to exclude (by name or index).
-        names : bool
-            Return channel names instead of index array (default False).
+        exclude : list of str, int
+            Sensors to exclude (by name or index).
 
         Returns
         -------
-        index : array of int  (if ``names==False``)
-            Numpy index indexing good channels.
-        names : Datalist of str  (if ``names==True``)
-            List of channel names.
+        index : NDVar
+            Boolean :class:`NDVar` indexing selected channels.
         """
-        if exclude is None:
-            return FULL_SLICE
-
-        index = np.ones(len(self), dtype=bool)
-        for ch in exclude:
-            try:
-                index[self.channel_idx[ch]] = False
-            except KeyError:
-                raise ValueError("Invalid channel name: %s" % repr(ch))
-
-        if names:
-            return self.names[index]
+        if include is None == exclude is None:
+            raise TypeError(f"inclide={include!r}, exclude={exclude!r}: Need to specify exactly one of include, exclude")
+        elif include is not None:
+            if isinstance(include, str):
+                include = [include]
+            index = np.zeros(len(self), dtype=bool)
+            for ch in include:
+                try:
+                    index[self.channel_idx[ch]] = True
+                except KeyError:
+                    raise ValueError(f"Invalid channel name: {ch!r}")
+            return NDVar(index, (self,))
         else:
-            return index
+            return ~self.index(exclude)
 
     def _normalize_sensor_names(self, names, missing='raise'):
         "Process a user-input list of sensor names"
@@ -8956,18 +8925,26 @@ class SourceSpaceBase(Dimension):
         normals = [ss['nn'][v] for ss, v in zip(sss, self.vertices)]
         return np.vstack(normals)
 
-    def _array_index(self, arg):
-        if isinstance(arg, Integral) or (isinstance(arg, np.ndarray) and arg.dtype.kind in 'ib'):
+    def _array_index(self, arg, allow_vertex=True):
+        if isinstance(arg, str):
+            if self.parc is not None and arg in self.parc:
+                return self.parc == arg
+            elif allow_vertex:
+                return self._array_index_for_vertex(arg)
+            elif self.parc is None:
+                raise IndexError(f"{arg!r}: {self.__class__.__name__} has no parcellation")
+            else:
+                raise IndexError(f"{arg!r}: {self.__class__.__name__} has no such label")
+        elif isinstance(arg, Integral) or (isinstance(arg, np.ndarray) and arg.dtype.kind in 'ib'):
             return arg
         elif isinstance(arg, Sequence):
             if all(isinstance(v, str) for v in arg):
                 if self.parc is not None and all(a in self.parc for a in arg):
                     return self.parc.isin(arg)
+                elif allow_vertex:
+                    return [self._array_index_for_vertex(v) for v in arg]
                 else:
-                    try:
-                        return [self._array_index_for_vertex(v) for v in arg]
-                    except NotImplementedError:
-                        raise IndexError(f"{arg!r}")
+                    raise IndexError(f"{arg!r}")
             elif all(isinstance(v, INT_TYPES) for v in arg):
                 return arg
             else:
@@ -8975,37 +8952,8 @@ class SourceSpaceBase(Dimension):
         else:
             return Dimension._array_index(self, arg)
 
-    def _array_index_label(self, label):
-        if isinstance(label, str):
-            if self.parc is None:
-                raise IndexError(f"{label!r}: {self.__class__.__name__} has no parcellation")
-            elif label not in self.parc:
-                raise IndexError(f"{label!r}: {self.__class__.__name__} has no such label")
-            idx = self.parc == label
-        elif label.hemi == 'both':
-            lh_idx = self._array_index_hemilabel(label.lh)
-            rh_idx = self._array_index_hemilabel(label.rh)
-            idx = np.hstack((lh_idx, rh_idx))
-        else:
-            idx = np.zeros(len(self), dtype=np.bool8)
-            idx_part = self._array_index_hemilabel(label)
-            if label.hemi == 'lh':
-                idx[:self.lh_n] = idx_part
-            elif label.hemi == 'rh':
-                idx[self.lh_n:] = idx_part
-            else:
-                err = "Unknown value for label.hemi: %s" % repr(label.hemi)
-                raise ValueError(err)
-
-        return idx
-
-    def _array_index_hemilabel(self, label):
-        stc_vertices = self.vertices[label.hemi == 'rh']
-        idx = np.in1d(stc_vertices, label.vertices, True)
-        return idx
-
     def _array_index_for_vertex(self, vertex_desc):
-        raise NotImplementedError
+        raise NotImplementedError(f"Index for {vertex_desc!r}")
 
     def _array_index_to(self, other):
         "Int index to access data from self in an order consistent with other"
@@ -9033,21 +8981,23 @@ class SourceSpaceBase(Dimension):
 
         Parameters
         ----------
-        label : str | Label | BiHemiLabel
-            The name of a region in the current parcellation, or a Label object
-            (as created for example by mne.read_label). If the label does not
-            match any sources in the SourceEstimate, a ValueError is raised.
+        label : str | sequance of str
+            One or several names of regions in the current parcellation.
 
         Returns
         -------
         index : NDVar of bool
             Index into the source space dim that corresponds to the label.
         """
-        idx = self._array_index_label(label)
+        idx = self._array_index(label, allow_vertex=False)
         if isinstance(label, str):
             name = label
-        else:
+        elif isinstance(label, Sequence):
+            name = '+'.join(label)
+        elif isinstance(label, MNE_LABEL):
             name = label.name
+        else:
+            raise TypeError(f"{label!r}")
         return NDVar(idx, (self,), {}, name)
 
     def _is_superset_of(self, dim):
@@ -9186,9 +9136,9 @@ class SourceSpace(SourceSpaceBase):
         bool_index = np.bincount(int_index, minlength=self._n_vert).astype(bool)
 
         # vertices
-        boundaries = np.cumsum(tuple(chain((0,), (len(v) for v in self.vertices))))
-        vertices = [v[bool_index[boundaries[i]:boundaries[i + 1]]]
-                    for i, v in enumerate(self.vertices)]
+        boundaries = np.cumsum(list(chain((0,), (len(v) for v in self.vertices))))
+        vertices = [v[bool_index[start: stop]] if stop > start else np.empty(0, int)
+                    for v, (start, stop) in zip(self.vertices, intervals(boundaries))]
 
         # parc
         parc = None if self.parc is None else self.parc[index]
@@ -9252,9 +9202,21 @@ class SourceSpace(SourceSpaceBase):
         src = self.get_source_space()
         return _mne_tri_soure_space_graph(src, self.vertices)
 
-    def _array_index(self, arg):
-        if isinstance(arg, MNE_LABEL):
-            return self._array_index_label(arg)
+    def _array_index(self, arg, allow_vertex=True):
+        if isinstance(arg, mne.BiHemiLabel):
+            lh_idx = self._array_index_hemilabel(arg.lh)
+            rh_idx = self._array_index_hemilabel(arg.rh)
+            return np.hstack((lh_idx, rh_idx))
+        elif isinstance(arg, mne.Label):
+            idx = np.zeros(len(self), dtype=np.bool8)
+            idx_part = self._array_index_hemilabel(arg)
+            if arg.hemi == 'lh':
+                idx[:self.lh_n] = idx_part
+            elif arg.hemi == 'rh':
+                idx[self.lh_n:] = idx_part
+            else:
+                raise ValueError(f"{arg!r} with unknown value for label.hemi: {arg.hemi!r}")
+            return idx
         elif isinstance(arg, str):
             if arg == 'lh':
                 return slice(self.lh_n)
@@ -9263,11 +9225,7 @@ class SourceSpace(SourceSpaceBase):
                     return slice(self.lh_n, None)
                 else:
                     return slice(0, 0)
-            elif self.parc is not None and arg in self.parc:
-                return self.parc == arg
-            else:
-                return self._array_index_for_vertex(arg)
-        elif isinstance(arg, SourceSpace):
+        elif isinstance(arg, self.__class__):
             sv = self.vertices
             ov = arg.vertices
             if all(np.array_equal(s, o) for s, o in zip(sv, ov)):
@@ -9276,7 +9234,7 @@ class SourceSpace(SourceSpaceBase):
                 raise IndexError("Index contains unknown sources")
             else:
                 return np.hstack([np.in1d(s, o, True) for s, o in zip(sv, ov)])
-        return SourceSpaceBase._array_index(self, arg)
+        return SourceSpaceBase._array_index(self, arg, allow_vertex)
 
     def _array_index_for_vertex(self, vertex_desc):
         m = self._vertex_re.match(vertex_desc)
@@ -9293,6 +9251,11 @@ class SourceSpace(SourceSpaceBase):
                 return i
         else:
             raise IndexError(f"{vertex_desc!r}: SourceSpace does not contain this vertex")
+
+    def _array_index_hemilabel(self, label: mne.Label):
+        stc_vertices = self.vertices[label.hemi == 'rh']
+        idx = np.in1d(stc_vertices, label.vertices, True)
+        return idx
 
     def _dim_index(self, index):
         if np.isscalar(index):
@@ -9349,6 +9312,23 @@ class SourceSpace(SourceSpaceBase):
     def _read_surf(self, hemi, surf='orig'):
         path = Path(f'{self.subjects_dir}/{self.subject}/surf/{hemi}.{surf}')
         return read_geometry(path)
+
+    def index_for_label(self, label):
+        """Return the index for a label
+
+        Parameters
+        ----------
+        label : str | sequance of str | Label | BiHemiLabel
+            The name of a region in the current parcellation, or an :mod:`mne`
+            :class:`~mne.label.Label` object. If the label does not
+            match any sources in the SourceEstimate, a ValueError is raised.
+
+        Returns
+        -------
+        index : NDVar of bool
+            Index into the source space dim that corresponds to the label.
+        """
+        return SourceSpaceBase.index_for_label(self, label)
 
     def surface_coordinates(self, surf='white'):
         """Load surface coordinates for any FreeSurfer surface
@@ -9483,15 +9463,11 @@ class VolumeSourceSpace(SourceSpaceBase):
         coords = sss[0]['rr'][self.vertices[0]]
         return squareform(pdist(coords))
 
-    def _array_index(self, arg):
+    def _array_index(self, arg, allow_vertex=True):
         if isinstance(arg, str):
             if arg in ('lh', 'rh'):
                 return self.hemi == arg
-            elif self.parc is not None and arg in self.parc:
-                return self.parc == arg
-            else:
-                return self._array_index_for_vertex(arg)
-        return SourceSpaceBase._array_index(self, arg)
+        return SourceSpaceBase._array_index(self, arg, allow_vertex)
 
     def _array_index_for_vertex(self, vertex_desc):
         m = re.match(r'(\d+)$', vertex_desc)
@@ -9918,6 +9894,10 @@ def intersect_dims(dims1, dims2, check_dims=True):
 EVAL_CONTEXT.update(Var=Var, Factor=Factor, extrema=extrema)
 
 NDVarArg = typing.Union[NDVar, str]
+VarArg = typing.Union[Var, str]
+NumericArg = typing.Union[Var, NDVar, str]
 CategorialArg = typing.Union[Factor, Interaction, NestedEffect, str]
 FactorArg = typing.Union[Factor, str]
+CellArg = typing.Union[str, typing.Tuple[str, ...]]
 IndexArg = typing.Union[Var, np.ndarray, str]
+ModelArg = typing.Union[Model, Interaction, Categorial, Var, str]

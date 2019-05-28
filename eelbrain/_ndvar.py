@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
 """NDVar operations
 

@@ -51,7 +51,10 @@ class CombinationParc(Parcellation):
             'lobes-ot': CombinationParc('lobes', {'occipitotemporal': "occipital + temporal"}),
         }
 
-    An example using a split label::
+    An example using a split label. In ``split(superiorfrontal, 3)[2]``, ``3`` indicates a split into
+    three parts, and the index ``[2]`` picks the last one. Label are split along their longest axis,
+    and ordered posterior to anterior, so ``[2]`` picks the most anterior part of
+    ``superiorfrontal``::
 
         parcs = {
             'medial': CombinationParc('aparc', {

@@ -83,10 +83,9 @@ Useful tools:
 Testing
 -------
 
-Eelbrain uses `nose <https://nose.readthedocs.org>`_ for testing.
 Tests for individual modules are included in folders called ``tests``, usually
 on the same level as the module.
 To run all tests, run ``$ make test`` from the Eelbrain project directory.
-On macOS, ``nosetests`` needs to run with the framework build of Python;
-if you get a corresponding error, run ``$ ./fix-bin nosetests`` from the
+On macOS, tests needs to run with the framework build of Python;
+if you get a corresponding error, run ``$ ./fix-bin pytest`` from the
 ``Eelbrain`` repository root.

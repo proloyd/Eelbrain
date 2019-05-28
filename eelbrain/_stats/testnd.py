@@ -44,7 +44,7 @@ from ..fmtxt import FMText
 from .._celltable import Celltable
 from .._config import CONFIG
 from .._data_obj import (
-    NDVarArg, CategorialArg, IndexArg,
+    CategorialArg, CellArg, IndexArg, ModelArg, NDVarArg, VarArg,
     Dataset, Var, Factor, Interaction, NestedEffect,
     NDVar, Categorial, UTS,
     ascategorial, asmodel, asndvar, asvar, assub,
@@ -150,9 +150,11 @@ class NDTest:
                 sub_repr = '<array>'
             else:
                 sub_repr = repr(self.sub)
-            args.append('sub=%s' % sub_repr)
+            args.append(f'sub={sub_repr}')
         if self._cdist:
             args += self._repr_cdist()
+        else:
+            args.append('samples=0')
 
         return f"<{self.__class__.__name__} {', '.join(args)}>"
 
@@ -411,7 +413,7 @@ class t_contrast_rel(NDTest):
         Contrast specification: see Notes.
     match : Factor
         Match cases for a repeated measures test.
-    sub : None | index-array
+    sub : index
         Perform the test with a subset of the data.
     ds : None | Dataset
         If a Dataset is specified, all data-objects can be specified as
@@ -422,7 +424,7 @@ class t_contrast_rel(NDTest):
         1: upper tail (one-tailed);
         -1: lower tail (one-tailed).
     samples : int
-        Number of samples for permutation test (default 0).
+        Number of samples for permutation test (default 10,000).
     pmin : None | scalar (0 < pmin < 1)
         Threshold for forming clusters:  use a t-value equivalent to an
         uncorrected p-value for a related samples t-test (with df =
@@ -439,9 +441,8 @@ class t_contrast_rel(NDTest):
         Stop of the time window for the permutation test (default is the
         end of ``y``).
     parc : str
-        Collect permutation extrema for all regions of the parcellation of
-        this dimension. For threshold-based test, the regions are
-        disconnected.
+        Collect permutation statistics for all regions of the parcellation of
+        this dimension. For threshold-based test, the regions are disconnected.
     force_permutation: bool
         Conduct permutations regardless of whether there are any clusters.
     mintime : scalar
@@ -486,9 +487,24 @@ class t_contrast_rel(NDTest):
     _statistic = 't'
 
     @user_activity
-    def __init__(self, y, x, contrast, match=None, sub=None, ds=None, tail=0,
-                 samples=0, pmin=None, tmin=None, tfce=False, tstart=None,
-                 tstop=None, parc=None, force_permutation=False, **criteria):
+    def __init__(
+            self,
+            y: NDVarArg,
+            x: CategorialArg,
+            contrast: str,
+            match: CategorialArg = None,
+            sub: CategorialArg = None,
+            ds: Dataset = None,
+            tail: int = 0,
+            samples: int = 10000,
+            pmin: float = None,
+            tmin: float = None,
+            tfce: Union[float, bool] = False,
+            tstart: float = None,
+            tstop: float = None,
+            parc: str = None,
+            force_permutation: bool = False,
+            **criteria):
         if match is None:
             raise TypeError("The `match` parameter needs to be specified for repeated measures test t_contrast_rel")
         ct = Celltable(y, x, match, sub, ds=ds, coercion=asndvar, dtype=np.float64)
@@ -568,13 +584,13 @@ class corr(NDTest):
         The continuous predictor variable.
     norm : None | categorial
         Categories in which to normalize (z-score) x.
-    sub : None | index-array
+    sub : index
         Perform the test with a subset of the data.
     ds : None | Dataset
         If a Dataset is specified, all data-objects can be specified as
         names of Dataset variables.
     samples : int
-        Number of samples for permutation test (default 0).
+        Number of samples for permutation test (default 10,000).
     pmin : None | scalar (0 < pmin < 1)
         Threshold for forming clusters:  use an r-value equivalent to an
         uncorrected p-value.
@@ -593,9 +609,8 @@ class corr(NDTest):
         When permuting data, only shuffle the cases within the categories
         of match.
     parc : str
-        Collect permutation extrema for all regions of the parcellation of
-        this dimension. For threshold-based test, the regions are
-        disconnected.
+        Collect permutation statistics for all regions of the parcellation of
+        this dimension. For threshold-based test, the regions are disconnected.
     mintime : scalar
         Minimum duration for clusters (in seconds).
     minsource : int
@@ -622,9 +637,22 @@ class corr(NDTest):
     _statistic = 'r'
 
     @user_activity
-    def __init__(self, y, x, norm=None, sub=None, ds=None, samples=0,
-                 pmin=None, rmin=None, tfce=False, tstart=None, tstop=None,
-                 match=None, parc=None, **criteria):
+    def __init__(
+            self,
+            y: NDVarArg,
+            x: VarArg,
+            norm: CategorialArg = None,
+            sub: IndexArg = None,
+            ds: Dataset = None,
+            samples: int = 10000,
+            pmin: float = None,
+            rmin: float = None,
+            tfce: Union[float, bool] = False,
+            tstart: float = None,
+            tstop: float = None,
+            match: CategorialArg = None,
+            parc: str = None,
+            **criteria):
         sub = assub(sub, ds)
         y = asndvar(y, sub=sub, ds=ds, dtype=np.float64)
         check_for_vector_dim(y)
@@ -782,7 +810,7 @@ class ttest_1samp(NDDifferenceTest):
         Value to compare y against (default is 0).
     match : None | categorial
         Combine data for these categories before testing.
-    sub : None | index-array
+    sub : index
         Perform test with a subset of the data.
     ds : None | Dataset
         If a Dataset is specified, all data-objects can be specified as
@@ -793,7 +821,7 @@ class ttest_1samp(NDDifferenceTest):
         1: upper tail (one-tailed);
         -1: lower tail (one-tailed).
     samples : int
-        Number of samples for permutation test (default 0).
+        Number of samples for permutation test (default 10,000).
     pmin : None | scalar (0 < pmin < 1)
         Threshold for forming clusters:  use a t-value equivalent to an
         uncorrected p-value.
@@ -809,9 +837,8 @@ class ttest_1samp(NDDifferenceTest):
         Stop of the time window for the permutation test (default is the
         end of ``y``).
     parc : str
-        Collect permutation extrema for all regions of the parcellation of
-        this dimension. For threshold-based test, the regions are
-        disconnected.
+        Collect permutation statistics for all regions of the parcellation of
+        this dimension. For threshold-based test, the regions are disconnected.
     force_permutation: bool
         Conduct permutations regardless of whether there are any clusters.
     mintime : scalar
@@ -848,9 +875,23 @@ class ttest_1samp(NDDifferenceTest):
     _statistic = 't'
 
     @user_activity
-    def __init__(self, y, popmean=0, match=None, sub=None, ds=None, tail=0,
-                 samples=0, pmin=None, tmin=None, tfce=False, tstart=None,
-                 tstop=None, parc=None, force_permutation=False, **criteria):
+    def __init__(
+            self,
+            y: NDVarArg,
+            popmean: float = 0,
+            match: CategorialArg = None,
+            sub: IndexArg = None,
+            ds: Dataset = None,
+            tail: int = 0,
+            samples: int = 10000,
+            pmin: float = None,
+            tmin: float = None,
+            tfce: Union[float, bool] = False,
+            tstart: float = None,
+            tstop: float = None,
+            parc: str = None,
+            force_permutation: bool = False,
+            **criteria):
         ct = Celltable(y, match=match, sub=sub, ds=ds, coercion=asndvar, dtype=np.float64)
         check_for_vector_dim(ct.y)
 
@@ -991,7 +1032,7 @@ class ttest_ind(NDDifferenceTest):
         Control condition (cell of ``x``).
     match : categorial
         Combine cases with the same cell on ``x % match``.
-    sub : None | index-array
+    sub : index
         Perform the test with a subset of the data.
     ds : None | Dataset
         If a Dataset is specified, all data-objects can be specified as
@@ -1002,7 +1043,7 @@ class ttest_ind(NDDifferenceTest):
         1: upper tail (one-tailed);
         -1: lower tail (one-tailed).
     samples : int
-        Number of samples for permutation test (default 0).
+        Number of samples for permutation test (default 10,000).
     pmin : None | scalar (0 < pmin < 1)
         Threshold p value for forming clusters. None for threshold-free
         cluster enhancement.
@@ -1018,9 +1059,8 @@ class ttest_ind(NDDifferenceTest):
         Stop of the time window for the permutation test (default is the
         end of ``y``).
     parc : str
-        Collect permutation extrema for all regions of the parcellation of
-        this dimension. For threshold-based test, the regions are
-        disconnected.
+        Collect permutation statistics for all regions of the parcellation of
+        this dimension. For threshold-based test, the regions are disconnected.
     force_permutation: bool
         Conduct permutations regardless of whether there are any clusters.
     mintime : scalar
@@ -1063,14 +1103,14 @@ class ttest_ind(NDDifferenceTest):
     def __init__(
             self,
             y: NDVarArg,
-            x: CategorialArg,
-            c1: str = None,
-            c0: str = None,
-            match: CategorialArg=None,
+            x: Union[CategorialArg, NDVarArg],
+            c1: CellArg = None,
+            c0: CellArg = None,
+            match: CategorialArg = None,
             sub: IndexArg = None,
             ds: Dataset = None,
             tail: int = 0,
-            samples: int = 0,
+            samples: int = 10000,
             pmin: float = None,
             tmin: float = None,
             tfce: Union[float, bool] = False,
@@ -1189,6 +1229,8 @@ class ttest_ind(NDDifferenceTest):
 def _related_measures_args(y, x, c1, c0, match, ds, sub):
     "Interpret parameters for related measures tests (2 different argspecs)"
     if isinstance(x, str):
+        if ds is None:
+            raise TypeError(f"x={x!r} specified as str without specifying ds")
         x = ds.eval(x)
 
     if isinstance(x, NDVar):
@@ -1239,7 +1281,7 @@ class ttest_rel(NDMaskedC1Mixin, NDDifferenceTest):
     match : categorial
         Units within which measurements are related (e.g. 'subject' in a
         within-subject comparison).
-    sub : None | index-array
+    sub : index
         Perform the test with a subset of the data.
     ds : None | Dataset
         If a Dataset is specified, all data-objects can be specified as
@@ -1250,7 +1292,7 @@ class ttest_rel(NDMaskedC1Mixin, NDDifferenceTest):
         1: upper tail (one-tailed);
         -1: lower tail (one-tailed).
     samples : int
-        Number of samples for permutation test (default 0).
+        Number of samples for permutation test (default 10,000).
     pmin : None | scalar (0 < pmin < 1)
         Threshold for forming clusters:  use a t-value equivalent to an
         uncorrected p-value.
@@ -1266,9 +1308,8 @@ class ttest_rel(NDMaskedC1Mixin, NDDifferenceTest):
         Stop of the time window for the permutation test (default is the
         end of ``y``).
     parc : str
-        Collect permutation extrema for all regions of the parcellation of
-        this dimension. For threshold-based test, the regions are
-        disconnected.
+        Collect permutation statistics for all regions of the parcellation of
+        this dimension. For threshold-based test, the regions are disconnected.
     force_permutation: bool
         Conduct permutations regardless of whether there are any clusters.
     mintime : scalar
@@ -1312,9 +1353,25 @@ class ttest_rel(NDMaskedC1Mixin, NDDifferenceTest):
     _statistic = 't'
 
     @user_activity
-    def __init__(self, y, x, c1=None, c0=None, match=None, sub=None, ds=None,
-                 tail=0, samples=0, pmin=None, tmin=None, tfce=False,
-                 tstart=None, tstop=None, parc=None, force_permutation=False, **criteria):
+    def __init__(
+            self,
+            y: NDVarArg,
+            x: Union[CategorialArg, NDVarArg],
+            c1: CellArg = None,
+            c0: CellArg = None,
+            match: CategorialArg = None,
+            sub: IndexArg = None,
+            ds: Dataset = None,
+            tail: int = 0,
+            samples: int = 10000,
+            pmin: float = None,
+            tmin: float = None,
+            tfce: Union[float, bool] = False,
+            tstart: float = None,
+            tstop: float = None,
+            parc: str = None,
+            force_permutation: bool = False,
+            **criteria):
         y1, y0, c1, c0, match, n, x_name, c1, c1_name, c0, c0_name = _related_measures_args(y, x, c1, c0, match, ds, sub)
         check_for_vector_dim(y1)
 
@@ -1616,16 +1673,16 @@ class anova(MultiEffectNDTest):
     Parameters
     ----------
     y : NDVar
-        Measurements (dependent variable)
-    x : categorial
-        Model
-    sub : None | index-array
+        Dependent variable.
+    x : Model
+        Independent variables.
+    sub : index
         Perform the test with a subset of the data.
     ds : None | Dataset
         If a Dataset is specified, all data-objects can be specified as
         names of Dataset variables.
     samples : int
-        Number of samples for permutation test (default 0).
+        Number of samples for permutation test (default 10,000).
     pmin : None | scalar (0 < pmin < 1)
         Threshold for forming clusters:  use an f-value equivalent to an
         uncorrected p-value.
@@ -1648,9 +1705,8 @@ class anova(MultiEffectNDTest):
         of match. By default, ``match`` is determined automatically based on
         the random efects structure of ``x``.
     parc : str
-        Collect permutation extrema for all regions of the parcellation of
-        this dimension. For threshold-based test, the regions are
-        disconnected.
+        Collect permutation statistics for all regions of the parcellation of
+        this dimension. For threshold-based test, the regions are disconnected.
     force_permutation: bool
         Conduct permutations regardless of whether there are any clusters.
     mintime : scalar
@@ -1687,9 +1743,22 @@ class anova(MultiEffectNDTest):
     _statistic_tail = 1
 
     @user_activity
-    def __init__(self, y, x, sub=None, ds=None, samples=0, pmin=None,
-                 fmin=None, tfce=False, tstart=None, tstop=None, match=None,
-                 parc=None, force_permutation=False, **criteria):
+    def __init__(
+            self,
+            y: NDVarArg,
+            x: ModelArg,
+            sub: IndexArg = None,
+            ds: Dataset = None,
+            samples: int = 10000,
+            pmin: float = None,
+            fmin: float = None,
+            tfce: Union[float, bool] = False,
+            tstart: float = None,
+            tstop: float = None,
+            match: Union[CategorialArg, bool] = None,
+            parc: str = None,
+            force_permutation: bool = False,
+            **criteria):
         x_arg = x
         sub_arg = sub
         sub = assub(sub, ds)
@@ -1819,9 +1888,22 @@ class anova(MultiEffectNDTest):
         else:
             return self._statistic_map
 
-    def table(self):
-        """Table with effects and smallest p-value"""
-        table = fmtxt.Table('rlr' + ('' if self.p is None else 'rl'))
+    def table(self, title=None, caption=None):
+        """Table listing all effects and corresponding smallest p-values
+
+        Parameters
+        ----------
+        title : text
+            Title for the table.
+        caption : text
+            Caption for the table.
+
+        Returns
+        -------
+        table : eelbrain.fmtxt.Table
+            ANOVA table.
+        """
+        table = fmtxt.Table('rlr' + ('' if self.p is None else 'rl'), title=title, caption=caption)
         table.cells('#', 'Effect', 'f_max')
         if self.p is not None:
             table.cells('p', 'sig')
@@ -1838,7 +1920,7 @@ class anova(MultiEffectNDTest):
 
 
 class Vector(NDDifferenceTest):
-    """Test a vector field for vectors with non-random directions
+    """Test a vector field for vectors with non-random direction
 
     Parameters
     ----------
@@ -1846,14 +1928,14 @@ class Vector(NDDifferenceTest):
         Dependent variable (needs to include one vector dimension).
     match : None | categorial
         Combine data for these categories before testing.
-    sub : None | index-array
+    sub : index
         Perform test with a subset of the data.
     ds : None | Dataset
         If a Dataset is specified, all data-objects can be specified as
         names of Dataset variables
     samples : int
         Number of samples for permutation test (default 10000).
-    vmin : scalar
+    tmin : scalar
         Threshold value for forming clusters.
     tfce : bool | scalar
         Use threshold-free cluster enhancement. Use a scalar to specify the
@@ -1865,15 +1947,13 @@ class Vector(NDDifferenceTest):
         Stop of the time window for the permutation test (default is the
         end of ``y``).
     parc : str
-        Collect permutation extrema for all regions of the parcellation of
-        this dimension. For threshold-based test, the regions are
-        disconnected.
+        Collect permutation statistics for all regions of the parcellation of
+        this dimension. For threshold-based test, the regions are disconnected.
     force_permutation: bool
         Conduct permutations regardless of whether there are any clusters.
-    use_t2_stat: bool
-        Use Hotelling’s T-Square statistics. By default ``Vector`` test
-        chooses this statistic over vector norm. To choose vector norm as
-        test statistic try ``use_t2_stat=False``.
+    norm : bool
+        Use the vector norm as univariate test statistic (instead of Hotelling’s
+        T-Square statistic).
     mintime : scalar
         Minimum duration for clusters (in seconds).
     minsource : int
@@ -1881,32 +1961,62 @@ class Vector(NDDifferenceTest):
 
     Attributes
     ----------
-    difference : NDVar
-        The vector field averaged across cases.
     n : int
         Number of cases.
-    p : NDVar
-        Map of p-values corrected for multiple comparison.
+    difference : NDVar
+        The vector field averaged across cases.
+    t2 : NDVar | None
+        Hotelling T-Square map; ``None`` if the test used ``norm=True``.
+    p : NDVar | None
+        Map of p-values corrected for multiple comparison (or ``None`` if no
+        correction was performed).
     tfce_map : NDVar | None
         Map of the test statistic processed with the threshold-free cluster
         enhancement algorithm (or None if no TFCE was performed).
+    clusters : None | Dataset
+        For cluster-based tests, a table of all clusters. Otherwise a table of
+        all significant regions (or ``None`` if permutations were omitted).
+        See also the :meth:`.find_clusters` method.
+
+    Notes
+    -----
+    Vector tests are based on the Hotelling T-Square statistic. Computation of
+    the T-Square statistic relies on [1]_.
+
+    References
+    ----------
+    .. [1] Kopp, J. (2008). Efficient numerical diagonalization of hermitian 3 x
+        3 matrices. International Journal of Modern Physics C, 19(3), 523-548.
+        `10.1142/S0129183108012303 <https://doi.org/10.1142/S0129183108012303>`_
     """
     _state_specific = ('difference', 'n', '_v_dim', 't2')
-    _statistic = 'norm'
 
     @user_activity
-    def __init__(self, y, match=None, sub=None, ds=None,
-                 samples=10000, vmin=None, tfce=False, tstart=None,
-                 tstop=None, parc=None, force_permutation=False, use_t2_stat=True, **criteria):
+    def __init__(
+            self,
+            y: NDVarArg,
+            match: CategorialArg = None,
+            sub: IndexArg = None,
+            ds: Dataset = None,
+            samples: int = 10000,
+            tmin: float = None,
+            tfce: Union[float, bool] = False,
+            tstart: float = None,
+            tstop: float = None,
+            parc: str = None,
+            force_permutation: bool = False,
+            norm: bool = False,
+            **criteria):
+        use_norm = bool(norm)
         ct = Celltable(y, match=match, sub=sub, ds=ds, coercion=asndvar, dtype=np.float64)
 
         n = len(ct.y)
-        cdist = NDPermutationDistribution(ct.y, samples, vmin, tfce, 1, 'norm', 'Vector test', tstart, tstop, criteria, parc, force_permutation)
+        cdist = NDPermutationDistribution(ct.y, samples, tmin, tfce, 1, 'norm', 'Vector test', tstart, tstop, criteria, parc, force_permutation)
 
         v_dim = ct.y.dimnames[cdist._vector_ax + 1]
         v_mean = ct.y.mean('case')
         v_mean_norm = v_mean.norm(v_dim)
-        if use_t2_stat:
+        if not use_norm:
             t2_map = self._vector_t2_map(ct.y)
             cdist.add_original(t2_map.x if v_mean.ndim > 1 else t2_map)
             if v_mean.ndim == 1:
@@ -1919,7 +2029,7 @@ class Vector(NDDifferenceTest):
 
         if cdist.do_permutation:
             iterator = random_seeds(samples)
-            vector_perm = partial(self._vector_perm, use_t2_stat=use_t2_stat)
+            vector_perm = partial(self._vector_perm, use_norm=use_norm)
             run_permutation(vector_perm, cdist, iterator)
 
         # store attributes
@@ -1934,6 +2044,10 @@ class Vector(NDDifferenceTest):
         if 'diff' in state:
             state['difference'] = state.pop('diff')
         NDTest.__setstate__(self, state)
+
+    @property
+    def _statistic(self):
+        return 'norm' if self.t2 is None else 't2'
 
     def _name(self):
         if self.y:
@@ -1950,26 +2064,24 @@ class Vector(NDDifferenceTest):
         return args
 
     @staticmethod
-    def _vector_perm(y, out, seed, use_t2_stat):
+    def _vector_perm(y, out, seed, use_norm):
         n_cases, n_dims, n_tests = y.shape
         assert n_dims == 3
         rotation = rand_rotation_matrices(n_cases, seed)
-        if use_t2_stat:
-            return vector.t2_stat_rotated(y, rotation, out)
-        else:
+        if use_norm:
             return vector.mean_norm_rotated(y, rotation, out)
+        else:
+            return vector.t2_stat_rotated(y, rotation, out)
 
     @staticmethod
     def _vector_t2_map(y):
-        ndim = len(y.dimnames)
-        dimnames = ('case', 'space',) + (None,) * (ndim - 2)
-        dimnames = y.get_dimnames(dimnames)
+        dimnames = y.get_dimnames(first=('case', 'space'))
         x = y.get_data(dimnames)
         t2_map = stats.t2_1samp(x)
-        if len(dimnames) == 2:
+        if y.ndim == 2:
             return np.float64(t2_map)
         else:
-            dims = (y.get_dim(dimnames[i]) for i in range(2, ndim))
+            dims = y.get_dims(dimnames[2:])
             return NDVar(t2_map, dims)
 
 
@@ -1992,14 +2104,14 @@ class VectorDifferenceIndependent(Vector):
         Control condition (cell of ``x``).
     match : categorial
         Combine cases with the same cell on ``x % match``.
-    sub : None | index-array
+    sub : index
         Perform the test with a subset of the data.
     ds : None | Dataset
         If a Dataset is specified, all data-objects can be specified as
         names of Dataset variables.
     samples : int
         Number of samples for permutation test (default 10000).
-    vmin : scalar
+    tmin : scalar
         Threshold value for forming clusters.
     tfce : bool | scalar
         Use threshold-free cluster enhancement. Use a scalar to specify the
@@ -2011,15 +2123,13 @@ class VectorDifferenceIndependent(Vector):
         Stop of the time window for the permutation test (default is the
         end of ``y``).
     parc : str
-        Collect permutation extrema for all regions of the parcellation of
-        this dimension. For threshold-based test, the regions are
-        disconnected.
+        Collect permutation statistics for all regions of the parcellation of
+        this dimension. For threshold-based test, the regions are disconnected.
     force_permutation: bool
         Conduct permutations regardless of whether there are any clusters.
-    use_t2_stat: bool
-        Use Hotelling’s T-Square statistics. By default ``Vector`` test
-        chooses this statistic over vector norm. To choose vector norm as
-        test statistic try ``use_t2_stat=False``.
+    norm : bool
+        Use the vector norm as univariate test statistic (instead of Hotelling’s
+        T-Square statistic).
     mintime : scalar
         Minimum duration for clusters (in seconds).
     minsource : int
@@ -2027,44 +2137,60 @@ class VectorDifferenceIndependent(Vector):
 
     Attributes
     ----------
-    c1_mean : NDVar
-        Mean in the c1 condition.
-    c0_mean : NDVar
-        Mean in the c0 condition.
-    clusters : None | Dataset
-        For cluster-based tests, a table of all clusters. Otherwise a table of
-        all significant regions (or ``None`` if permutations were omitted).
-        See also the :meth:`.find_clusters` method.
-    difference : NDVar
-        Difference between the mean in condition c1 and condition c0.
-    p : NDVar | None
-        Map of p-values corrected for multiple comparison (or None if no
-        correction was performed).
-    t2 : NDVar
-        Map of t-square values (``None`` with ``use_t2_stat=False``).
-    tfce_map : NDVar | None
-        Map of the test statistic processed with the threshold-free cluster
-        enhancement algorithm (or None if no TFCE was performed).
     n : int
         Total number of cases.
     n1 : int
         Number of cases in ``c1``.
     n0 : int
         Number of cases in ``c0``.
+    c1_mean : NDVar
+        Mean in the c1 condition.
+    c0_mean : NDVar
+        Mean in the c0 condition.
+    difference : NDVar
+        Difference between the mean in condition c1 and condition c0.
+    t2 : NDVar | None
+        Hotelling T-Square map; ``None`` if the test used ``norm=True``.
+    p : NDVar | None
+        Map of p-values corrected for multiple comparison (or None if no
+        correction was performed).
+    tfce_map : NDVar | None
+        Map of the test statistic processed with the threshold-free cluster
+        enhancement algorithm (or None if no TFCE was performed).
+    clusters : None | Dataset
+        For cluster-based tests, a table of all clusters. Otherwise a table of
+        all significant regions (or ``None`` if permutations were omitted).
+        See also the :meth:`.find_clusters` method.
     """
     _state_specific = ('difference', 'c1_mean', 'c0_mean' 'n', '_v_dim', 't2')
     _statistic = 'norm'
 
     @user_activity
-    def __init__(self, y, x, c1=None, c0=None, match=None, sub=None, ds=None,
-                 samples=10000, vmin=None, tfce=False, tstart=None,
-                 tstop=None, parc=None, force_permutation=False, use_t2_stat=False, **criteria):
+    def __init__(
+            self,
+            y: NDVarArg,
+            x: Union[CategorialArg, NDVarArg],
+            c1: str = None,
+            c0: str = None,
+            match: CategorialArg = None,
+            sub: IndexArg = None,
+            ds: Dataset = None,
+            samples: int = 10000,
+            tmin: float = None,
+            tfce: bool = False,
+            tstart: float = None,
+            tstop: float = None,
+            parc: str = None,
+            force_permutation: bool = False,
+            norm: bool = False,
+            **criteria):
+        use_norm = bool(norm)
         y, y1, y0, c1, c0, match, x_name, c1_name, c0_name = _independent_measures_args(y, x, c1, c0, match, ds, sub)
         self.n1 = len(y1)
         self.n0 = len(y0)
         self.n = len(y)
 
-        cdist = NDPermutationDistribution(y, samples, vmin, tfce, 1, 'norm', 'Vector test (independent)', tstart, tstop, criteria, parc, force_permutation)
+        cdist = NDPermutationDistribution(y, samples, tmin, tfce, 1, 'norm', 'Vector test (independent)', tstart, tstop, criteria, parc, force_permutation)
 
         self._v_dim = v_dim = y.dimnames[cdist._vector_ax + 1]
         self.c1_mean = y1.mean('case', name=cellname(c1_name))
@@ -2072,7 +2198,7 @@ class VectorDifferenceIndependent(Vector):
         self.difference = self.c1_mean - self.c0_mean
         self.difference.name = 'difference'
         v_mean_norm = self.difference.norm(v_dim)
-        if use_t2_stat:
+        if not use_norm:
             raise NotImplementedError("t2 statistic not implemented for VectorDifferenceIndependent")
         else:
             cdist.add_original(v_mean_norm.x if self.difference.ndim > 1 else v_mean_norm)
@@ -2080,7 +2206,7 @@ class VectorDifferenceIndependent(Vector):
 
         if cdist.do_permutation:
             iterator = random_seeds(samples)
-            vector_perm = partial(self._vector_perm, use_t2_stat=use_t2_stat)
+            vector_perm = partial(self._vector_perm, use_norm=use_norm)
             run_permutation(vector_perm, cdist, iterator, self.n1)
 
         NDTest.__init__(self, y, match, sub, samples, tfce, None, cdist, tstart, tstop)
@@ -2093,8 +2219,8 @@ class VectorDifferenceIndependent(Vector):
             return "Vector test (independent)"
 
     @staticmethod
-    def _vector_perm(y, n1, out, seed, use_t2_stat):
-        assert not use_t2_stat
+    def _vector_perm(y, n1, out, seed, use_norm):
+        assert use_norm
         n_cases, n_dims, n_tests = y.shape
         assert n_dims == 3
         # randomize directions
@@ -2140,14 +2266,14 @@ class VectorDifferenceRelated(NDMaskedC1Mixin, Vector):
     match : categorial
         Units within which measurements are related (e.g. 'subject' in a
         within-subject comparison).
-    sub : None | index-array
+    sub : index
         Perform the test with a subset of the data.
     ds : None | Dataset
         If a Dataset is specified, all data-objects can be specified as
         names of Dataset variables.
     samples : int
         Number of samples for permutation test (default 10000).
-    vmin : scalar
+    tmin : scalar
         Threshold value for forming clusters.
     tfce : bool | scalar
         Use threshold-free cluster enhancement. Use a scalar to specify the
@@ -2159,15 +2285,13 @@ class VectorDifferenceRelated(NDMaskedC1Mixin, Vector):
         Stop of the time window for the permutation test (default is the
         end of ``y``).
     parc : str
-        Collect permutation extrema for all regions of the parcellation of
-        this dimension. For threshold-based test, the regions are
-        disconnected.
+        Collect permutation statistics for all regions of the parcellation of
+        this dimension. For threshold-based test, the regions are disconnected.
     force_permutation: bool
         Conduct permutations regardless of whether there are any clusters.
-    use_t2_stat: bool
-        Use Hotelling’s T-Square statistics. By default ``Vector`` test
-        chooses this statistic over vector norm. To choose vector norm as
-        test statistic try ``use_t2_stat=False``.
+    norm : bool
+        Use the vector norm as univariate test statistic (instead of Hotelling’s
+        T-Square statistic).
     mintime : scalar
         Minimum duration for clusters (in seconds).
     minsource : int
@@ -2175,47 +2299,64 @@ class VectorDifferenceRelated(NDMaskedC1Mixin, Vector):
 
     Attributes
     ----------
+    n : int
+        Number of cases.
     c1_mean : NDVar
-        Mean in the c1 condition.
+        Mean in the ``c1`` condition.
     c0_mean : NDVar
-        Mean in the c0 condition.
+        Mean in the ``c0`` condition.
+    difference : NDVar
+        Difference between the mean in condition ``c1`` and condition ``c0``.
+    t2 : NDVar | None
+        Hotelling T-Square map; ``None`` if the test used ``norm=True``.
+    p : NDVar | None
+        Map of p-values corrected for multiple comparison (or ``None`` if no
+        correction was performed).
+    tfce_map : NDVar | None
+        Map of the test statistic processed with the threshold-free cluster
+        enhancement algorithm (or None if no TFCE was performed).
     clusters : None | Dataset
         For cluster-based tests, a table of all clusters. Otherwise a table of
         all significant regions (or ``None`` if permutations were omitted).
         See also the :meth:`.find_clusters` method.
-    difference : NDVar
-        Difference between the mean in condition c1 and condition c0.
-    p : NDVar | None
-        Map of p-values corrected for multiple comparison (or None if no
-        correction was performed).
-    t2 : NDVar
-        Map of t-square values (``None`` with ``use_t2_stat=False``).
-    tfce_map : NDVar | None
-        Map of the test statistic processed with the threshold-free cluster
-        enhancement algorithm (or None if no TFCE was performed).
-    n : int
-        Number of cases.
+
+    See Also
+    --------
+    Vector : One-sample vector test, notes on vector test implementation
     """
     _state_specific = ('difference', 'c1_mean', 'c0_mean' 'n', '_v_dim', 't2')
-    _statistic = 'norm'
 
     @user_activity
-    def __init__(self, y, x, c1=None, c0=None, match=None, sub=None, ds=None,
-                 samples=10000, vmin=None, tfce=False, tstart=None, tstop=None,
-                 parc=None, force_permutation=False, use_t2_stat=True, **criteria):
+    def __init__(
+            self,
+            y: NDVarArg,
+            x: Union[CategorialArg, NDVarArg],
+            c1: str = None,
+            c0: str = None,
+            match: CategorialArg = None,
+            sub: IndexArg = None,
+            ds: Dataset = None,
+            samples: int = 10000,
+            tmin: float = None,
+            tfce: bool = False,
+            tstart: float = None,
+            tstop: float = None,
+            parc: str = None,
+            force_permutation: bool = False,
+            norm: bool = False,
+            **criteria):
+        use_norm = bool(norm)
         y1, y0, c1, c0, match, n, x_name, c1, c1_name, c0, c0_name = _related_measures_args(y, x, c1, c0, match, ds, sub)
         difference = y1 - y0
         difference.name = 'difference'
 
         n_samples, samples = _resample_params(n, samples)
-        cdist = NDPermutationDistribution(
-            difference, n_samples, vmin, tfce, 1, 'norm', 'Vector test (related)',
-            tstart, tstop, criteria, parc, force_permutation)
+        cdist = NDPermutationDistribution(difference, n_samples, tmin, tfce, 1, 'norm', 'Vector test (related)', tstart, tstop, criteria, parc, force_permutation)
 
         v_dim = difference.dimnames[cdist._vector_ax + 1]
         v_mean = difference.mean('case')
         v_mean_norm = v_mean.norm(v_dim)
-        if use_t2_stat:
+        if not use_norm:
             t2_map = self._vector_t2_map(difference)
             cdist.add_original(t2_map.x if v_mean.ndim > 1 else t2_map)
             if v_mean.ndim == 1:
@@ -2228,7 +2369,7 @@ class VectorDifferenceRelated(NDMaskedC1Mixin, Vector):
 
         if cdist.do_permutation:
             iterator = random_seeds(n_samples)
-            vector_perm = partial(self._vector_perm, use_t2_stat=use_t2_stat)
+            vector_perm = partial(self._vector_perm, use_norm=use_norm)
             run_permutation(vector_perm, cdist, iterator)
 
         # store attributes
@@ -2582,6 +2723,37 @@ def get_map_processor(kind, *args):
 class NDPermutationDistribution:
     """Accumulate information on a cluster statistic.
 
+    Parameters
+    ----------
+    y : NDVar
+        Dependent variable.
+    samples : int
+        Number of permutations.
+    threshold : scalar > 0
+        Threshold-based clustering.
+    tfce : bool | scalar
+        Threshold-free cluster enhancement.
+    tail : 1 | 0 | -1
+        Which tail(s) of the distribution to consider. 0 is two-tailed,
+        whereas 1 only considers positive values and -1 only considers
+        negative values.
+    meas : str
+        Label for the parameter measurement (e.g., 't' for t-values).
+    name : None | str
+        Name for the comparison.
+    tstart, tstop : None | scalar
+        Restrict the time window for finding clusters (None: use the whole
+        epoch).
+    criteria : dict
+        Dictionary with threshold criteria for cluster size: 'mintime'
+        (seconds) and 'minsource' (n_sources).
+    parc : str
+        Collect permutation statistics for all regions of the parcellation of
+        this dimension. For threshold-based test, the regions are disconnected.
+    force_permutation : bool
+        Conduct permutations regardless of whether there are any clusters.
+
+
     Notes
     -----
     Use of the NDPermutationDistribution proceeds in 3 steps:
@@ -2603,39 +2775,6 @@ class NDPermutationDistribution:
 
     def __init__(self, y, samples, threshold, tfce=False, tail=0, meas='?', name=None,
                  tstart=None, tstop=None, criteria={}, parc=None, force_permutation=False):
-        """Accumulate information on a cluster statistic.
-
-        Parameters
-        ----------
-        y : NDVar
-            Dependent variable.
-        samples : int
-            Number of permutations.
-        threshold : scalar > 0
-            Threshold-based clustering.
-        tfce : bool | scalar
-            Threshold-free cluster enhancement.
-        tail : 1 | 0 | -1
-            Which tail(s) of the distribution to consider. 0 is two-tailed,
-            whereas 1 only considers positive values and -1 only considers
-            negative values.
-        meas : str
-            Label for the parameter measurement (e.g., 't' for t-values).
-        name : None | str
-            Name for the comparison.
-        tstart, tstop : None | scalar
-            Restrict the time window for finding clusters (None: use the whole
-            epoch).
-        criteria : dict
-            Dictionary with threshold criteria for cluster size: 'mintime'
-            (seconds) and 'minsource' (n_sources).
-        parc : str
-            Collect permutation extrema for all regions of the parcellation of
-            this dimension. For threshold-based test, the regions are
-            disconnected.
-        force_permutation : bool
-            Conduct permutations regardless of whether there are any clusters.
-        """
         assert y.has_case
         assert parc is None or isinstance(parc, str)
         if tfce and threshold:

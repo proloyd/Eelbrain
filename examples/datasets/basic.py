@@ -1,8 +1,8 @@
-# Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
 """
 Dataset basics
 ==============
 """
+# Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
 from eelbrain import *
 import numpy as np
 

@@ -1,7 +1,7 @@
 # Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
-from nose.tools import eq_, assert_almost_equal
 import numpy as np
 from numpy.testing import assert_array_equal, assert_allclose
+import pytest
 from scipy import signal
 
 from eelbrain import (
@@ -62,8 +62,7 @@ def test_correlation_coefficient():
     uts2 = uts.copy()
     uts2.x += np.random.normal(0, 1, uts2.shape)
 
-    assert_almost_equal(
-        correlation_coefficient(uts, uts2),
+    assert correlation_coefficient(uts, uts2) == pytest.approx(
         np.corrcoef(uts.x.ravel(), uts2.x.ravel())[0, 1])
     assert_allclose(
         correlation_coefficient(uts[:10], uts2[:10], 'time').x,
@@ -77,12 +76,12 @@ def test_cross_correlation():
     ds = datasets._get_continuous()
     x = ds['x1']
 
-    eq_(cross_correlation(x, x).argmax(), 0)
-    eq_(cross_correlation(x[2:], x).argmax(), 0)
-    eq_(cross_correlation(x[:9], x).argmax(), 0)
-    eq_(cross_correlation(x, x[1:]).argmax(), 0)
-    eq_(cross_correlation(x, x[:8]).argmax(), 0)
-    eq_(cross_correlation(x[2:], x[:8]).argmax(), 0)
+    assert cross_correlation(x, x).argmax() == 0
+    assert cross_correlation(x[2:], x).argmax() == 0
+    assert cross_correlation(x[:9], x).argmax() == 0
+    assert cross_correlation(x, x[1:]).argmax() == 0
+    assert cross_correlation(x, x[:8]).argmax() == 0
+    assert cross_correlation(x[2:], x[:8]).argmax() == 0
 
 
 def test_cwt():
@@ -110,11 +109,11 @@ def test_dot():
 def test_find_intervals():
     time = UTS(-5, 1, 10)
     x = NDVar([0, 1, 0, 1, 1, 0, 1, 1, 1, 0], (time,))
-    eq_(find_intervals(x), ((-4, -3), (-2, 0), (1, 4)))
+    assert find_intervals(x) == ((-4, -3), (-2, 0), (1, 4))
     x = NDVar([0, 1, 0, 1, 1, 0, 1, 1, 1, 1], (time,))
-    eq_(find_intervals(x), ((-4, -3), (-2, 0), (1, 5)))
+    assert find_intervals(x) == ((-4, -3), (-2, 0), (1, 5))
     x = NDVar([1, 1, 0, 1, 1, 0, 1, 1, 1, 1], (time,))
-    eq_(find_intervals(x), ((-5, -3), (-2, 0), (1, 5)))
+    assert find_intervals(x) == ((-5, -3), (-2, 0), (1, 5))
 
 
 def test_find_peaks():

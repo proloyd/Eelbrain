@@ -1,9 +1,7 @@
 # Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
 "Utilities for testing"
 from contextlib import ContextDecorator, contextmanager
-from distutils.version import LooseVersion
-from functools import reduce, wraps
-from importlib import import_module
+from functools import reduce
 from importlib.util import spec_from_file_location, module_from_spec
 import os
 from operator import mul
@@ -11,9 +9,10 @@ from pathlib import Path
 import shutil
 import tempfile
 
-from nose.plugins.skip import SkipTest
+import mne
 import numpy as np
 from numpy.testing import assert_array_equal
+import pytest
 
 import eelbrain._wxgui
 from .._data_obj import Dataset, NDVar, Var, Factor, isdatalist, isdatacontainer, isuv
@@ -115,6 +114,7 @@ class GUITestContext(ContextDecorator):
         eelbrain._wxgui.select_epochs,
         eelbrain._wxgui.select_components,
         eelbrain._wxgui.history,
+        eelbrain._wxgui.load_stcs,
     )
 
     def __init__(self):
@@ -155,30 +155,19 @@ def import_attr(path, attr):
 
 
 def requires_mne_sample_data(function):
-    import mne
-
     if mne.datasets.sample.data_path(download=False):
-        @wraps(function)
-        def decorator(*args, **kwargs):
-            return function(*args, **kwargs)
+        return function
     else:
-        @wraps(function)
-        def decorator(*args, **kwargs):
-            raise SkipTest('Skipped %s, requires mne sample data' % function.__name__)
-    return decorator
+        return pytest.mark.skip('mne sample data unavailable')(function)
 
 
 def requires_pyarrow(function):
     "Sometimes broken under env-dev on Unix"
-    @wraps(function)
-    def decorator(*args, **kwargs):
-        try:
-            import pyarrow
-        except ImportError:
-            raise SkipTest(f'Skipped {function.__name__} because of pyarrow import error')
-        else:
-            return function(*args, **kwargs)
-    return decorator
+    try:
+        import pyarrow
+        return function
+    except ImportError:
+        return pytest.mark.skip('pyarrow import error')(function)
 
 
 def requires_r_ez(function):
@@ -188,24 +177,16 @@ def requires_r_ez(function):
         success = r('require(ez)')[0]
 
     if success:
-        @wraps(function)
-        def decorator(*args, **kwargs):
-            return function(*args, **kwargs)
+        return function
     else:
-        @wraps(function)
-        def decorator(*args, **kwargs):
-            raise SkipTest(f'Skipped {function.__name__}, requires r-ez')
-    return decorator
+        return pytest.mark.skip('r-ez unavailable')(function)
 
 
 def skip_on_windows(function):
-    @wraps(function)
-    def decorator(*args, **kwargs):
-        if os.name == 'nt':
-            raise SkipTest(f'Skipped {function.__name__} on Windows')
-        else:
-            return function(*args, **kwargs)
-    return decorator
+    if os.name == 'nt':
+        return pytest.mark.skip('Test disabled on Windows')(function)
+    else:
+        return function
 
 
 def file_path(name):

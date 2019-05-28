@@ -2,10 +2,8 @@
 from math import log, sqrt
 
 import numpy as np
-from scipy.signal import gaussian
-
-from nose.tools import eq_
 from numpy.testing import assert_allclose
+from scipy.signal import gaussian
 
 from eelbrain._data_opt import gaussian_smoother
 
@@ -19,11 +17,11 @@ def test_gaussian_smoother():
     g = gaussian_smoother(d, std)
 
     # basic properties
-    eq_(g.shape, (99, 99))
+    assert g.shape == (99, 99)
     # FWHM
-    eq_(g[0, 0] / 2, g[0, 20])
-    eq_(g[9, 0], 0)
-    eq_(g[0, 9], 0)
+    assert g[0, 0] / 2 == g[0, 20]
+    assert g[9, 0] == 0
+    assert g[0, 9] == 0
 
     # compare with scipy.signal gaussian
     ref = gaussian(99, std)

@@ -1,9 +1,9 @@
 # Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
 import warnings
 
-from nose.tools import assert_almost_equal, eq_, assert_raises
 import numpy as np
 from numpy.testing import assert_allclose, assert_equal
+import pytest
 import scipy.stats
 
 from eelbrain import datasets
@@ -23,13 +23,13 @@ def test_corr():
     p = stats.rtest_p(corr, df)
     for i in range(len(corr)):
         r_sp, p_sp = scipy.stats.pearsonr(y[:, i], x)
-        assert_almost_equal(corr[i], r_sp)
-        assert_almost_equal(p[i], p_sp)
+        assert corr[i] == pytest.approx(r_sp)
+        assert p[i] == pytest.approx(p_sp)
 
     # NaN
     with warnings.catch_warnings():  # divide by 0
         warnings.simplefilter("ignore")
-        eq_(stats.corr(np.arange(10), np.zeros(10)), 0)
+        assert stats.corr(np.arange(10), np.zeros(10)) == 0
 
     # perm
     y_perm = np.empty_like(y)
@@ -38,7 +38,7 @@ def test_corr():
         stats.corr(y, x, corr, perm)
         for i in range(len(corr)):
             r_sp, _ = scipy.stats.pearsonr(y_perm[:, i], x)
-            assert_almost_equal(corr[i], r_sp)
+            assert corr[i] == pytest.approx(r_sp)
 
 
 def test_lm():
@@ -74,19 +74,22 @@ def test_variability():
     ci = sem * scipy.stats.t.isf(0.05 / 2., len(y) - 1)
 
     # invalid spec
-    assert_raises(ValueError, stats.variability, y, 0, 0, '1mile', 0)
-    assert_raises(ValueError, stats.variability, y, 0, 0, 'ci7ci', 0)
+    with pytest.raises(ValueError):
+        stats.variability(y, 0, 0, '1mile', 0)
+    with pytest.raises(ValueError):
+        stats.variability(y, 0, 0, 'ci7ci', 0)
 
     # standard error
-    assert_almost_equal(stats.variability(y, None, None, 'sem', False), sem)
-    assert_almost_equal(stats.variability(y, None, None, '2sem', False), 2 * sem)
+    assert stats.variability(y, None, None, 'sem', False) == sem
+    assert stats.variability(y, None, None, '2sem', False) == 2 * sem
     # within subject standard-error
     target = scipy.stats.sem(stats.residuals(y[:, None], match), 0, len(match.cells))
-    assert_almost_equal(stats.variability(y, None, match, 'sem', True), target)
-    assert_almost_equal(stats.variability(y, None, match, 'sem', False), target)
+    assert stats.variability(y, None, match, 'sem', True) == target
+    assert stats.variability(y, None, match, 'sem', False) == target
     # one data point per match cell
     n = match.df + 1
-    assert_raises(ValueError, stats.variability, y[:n], None, match[:n], 'sem', True)
+    with pytest.raises(ValueError):
+        stats.variability(y[:n], None, match[:n], 'sem', True)
 
     target = np.array([scipy.stats.sem(y[x == cell], 0, 1) for cell in x.cells])
     es = stats.variability(y, x, None, 'sem', False)
@@ -95,9 +98,9 @@ def test_variability():
     stats.variability(y, x, None, 'sem', True)
 
     # confidence intervals
-    assert_almost_equal(stats.variability(y, None, None, '95%ci', False), ci)
-    assert_almost_equal(stats.variability(y, x, None, '95%ci', True), 3.86, 2)  # L&M: 3.85
-    assert_almost_equal(stats.variability(y, x, match, '95%ci', True), 0.52, 2)
+    assert stats.variability(y, None, None, '95%ci', False) == pytest.approx(ci)
+    assert stats.variability(y, x, None, '95%ci', True) == pytest.approx(3.86, abs=1e-2)  # L&M: 3.85
+    assert stats.variability(y, x, match, '95%ci', True) == pytest.approx(0.52, abs=1e-2)
 
     assert_equal(stats.variability(y, x, None, '95%ci', False)[::-1],
                  stats.variability(y, x, None, '95%ci', False, x.cells[::-1]))
@@ -142,7 +145,7 @@ def test_t_ind():
 
 
 def test_vector():
-    rotation = rand_rotation_matrices(4)
+    rotation = rand_rotation_matrices(4, 0)
     zeros = np.zeros((4, 3))
     assert stats.t2_1samp(zeros) == 0
     assert stats.t2_1samp(zeros, rotation) == 0

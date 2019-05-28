@@ -1,5 +1,4 @@
 # Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
-from nose.tools import assert_raises
 import os
 import shutil
 import tempfile
@@ -8,9 +7,7 @@ import numpy as np
 from numpy.testing import assert_array_equal
 
 from eelbrain import Dataset, datasets, load
-from eelbrain.testing import file_path
-
-from ...tests.test_data import assert_dataobj_equal, assert_dataset_equal
+from eelbrain.testing import assert_dataobj_equal, assert_dataset_equal, file_path
 
 
 def test_r_tsv_io():

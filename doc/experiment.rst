@@ -1,19 +1,26 @@
-.. currentmodule:: eelbrain
+.. currentmodule:: eelbrain.pipeline
 
 .. _experiment-class-guide:
 
-********************************
-The :class:`MneExperiment` Class
-********************************
-
-MneExperiment is a base class for managing data analysis for an MEG
-experiment with MNE.
+***********************************
+The :class:`MneExperiment` Pipeline
+***********************************
 
 .. seealso::
-    :class:`MneExperiment` class reference for details on all available methods
+     - :class:`MneExperiment` class reference for details on all available methods
+     - `Pipeline wiki page <https://github.com/christianbrodbeck/Eelbrain/wiki/MNE-Pipeline>`_
+       for additional information
 
 .. contents:: Contents
    :local:
+
+
+Introduction
+============
+
+The :class:`MneExperiment` class is a template for an MEG/EEG analysis pipeline.
+The pipeline is adapted to a specific experiment by creating a subclass, and
+specifying properties of the experiment as attributes.
 
 
 Step by step
@@ -163,22 +170,28 @@ The neighbor correlation can also be quantified, using::
 
 A simple way to cycle through subjects when performing a given pre-processing
 step is :meth:`MneExperiment.next`.
+If a general threshold is adequate, the selection of bad channels based on
+neighbor-correlation can be automated using the
+:meth:`MneExperiment.make_bad_channels_neighbor_correlation method::
+
+    >>> for subject in e:
+    ...     e.make_bad_channels_neighbor_correlation()
 
 
 ICA
 ---
 
 If preprocessing includes ICA, select which ICA components should be removed.
-The experiment ``raw`` state needs to be set to the ICA stage of the pipeline::
+To open the ICA selection GUI, The experiment ``raw`` state needs to be set to
+the ICA stage of the pipeline::
 
     >>> e.set(raw='ica')
-    >>> e.make_ica_selection(epoch='epoch', decim=10)
+    >>> e.make_ica_selection()
 
-Set ``epoch`` to the epoch whose data you want to display in the GUI (see
-:meth:`MneExperiment.make_ica_selection` for more information, in particular on
-how to precompute ICA decomposition for all subjects).
+See :meth:`MneExperiment.make_ica_selection` for more information on display
+options and on how to precompute ICA decomposition for all subjects.
 
-In order to select ICA components for multiple subject, a simple way to cycle
+When selecting ICA components for multiple subject, a simple way to cycle
 through subjects is :meth:`MneExperiment.next`, like::
 
     >>> e.make_ica_selection(epoch='epoch', decim=10)
@@ -216,17 +229,38 @@ To reject trials based on a pre-determined threshold, a loop can be used::
 Analysis
 --------
 
-Finally, define :attr:`MneExperiment.tests` and create a ``make-reports.py``
-script so that all reports can be updated by running a single script
-(see :ref:`MneExperiment-example`).
+With preprocessing completed, there are different options for analyzing the
+data.
+
+The most flexible option is loading data from the desired processing stage using
+one of the many ``.load_...`` methods of the :class:`MneExperiment`. For
+example, load a :class:`Dataset` with source-localized condition averages using
+:meth:`MneExperiment.load_evoked_stc`, then test a hypothesis using one of the
+mass-univariate test from the :mod:`testnd` module. To make this kind of
+analysis replicable, it is probably useful to write the complete analysis as a
+separate script that imports the experiment (see the `example experiment folder
+<https://github.com/christianbrodbeck/Eelbrain/tree/master/examples/mouse>`_).
+
+Many statistical comparisons can also be specified in the
+:attr:`MneExperiment.tests` attribute, and then loaded directly using the
+:meth:`MneExperiment.load_test` method. This has the advantage that the tests
+will be cached automatically and, once computed, can be loaded very quickly.
+However, these definitions are not quite as flexible as writing a custom script.
+
+Finally, for tests defined in :attr:`MneExperiment.tests`, the
+:class:`MneExperiment` can generate HTML report files. These are generated with
+the :meth:`MneExperiment.make_report` and :meth:`MneExperiment.make_report_rois`
+methods.
 
 .. Warning::
     If source files are changed (raw files, epoch rejection or bad channel
-    files, ...) reports are not updated unless the corresponding
+    files, ...) reports are not updated automatically unless the corresponding
     :meth:`MneExperiment.make_report` function is called again. For this reason
-    it is useful to have a script that calls :meth:`MneExperiment.make_report`
-    for all desired reports. Running the script ensures that all reports are
-    up-to-date, and will only take seconds if nothing has to be recomputed.
+    it is useful to have a script to generate all desired reports. Running the
+    script ensures that all reports are up-to-date, and will only take seconds
+    if nothing has to be recomputed (for an example see ``make-reports.py`` in
+    the `example experiment folder
+    <https://github.com/christianbrodbeck/Eelbrain/tree/master/examples/mouse>`_).
 
 
 .. _MneExperiment-example:
@@ -240,11 +274,23 @@ The following is a complete example for an experiment class definition file
 
 .. literalinclude:: ../examples/mouse/mouse.py
 
+The event structure is illustrated by looking at the first few events::
 
-Given the ``Mouse`` class definition above, the following is a
-script that would compute/update analysis reports:
-
-.. literalinclude:: ../examples/mouse/make_reports.py
+    >>> from mouse import *
+    >>> ds = e.load_events()
+    >>> ds.head()
+    trigger   i_start   T        SOA     subject   stimulus   prediction
+    --------------------------------------------------------------------
+    182       104273    104.27   12.04   S0001
+    182       116313    116.31   1.313   S0001
+    166       117626    117.63   0.598   S0001     prime      expected
+    162       118224    118.22   2.197   S0001     target     expected
+    166       120421    120.42   0.595   S0001     prime      expected
+    162       121016    121.02   2.195   S0001     target     expected
+    167       123211    123.21   0.596   S0001     prime      unexpected
+    163       123807    123.81   2.194   S0001     target     unexpected
+    167       126001    126      0.598   S0001     prime      unexpected
+    163       126599    126.6    2.195   S0001     target     unexpected
 
 
 Experiment Definition
@@ -320,7 +366,7 @@ Defaults
 .. py:attribute:: MneExperiment.defaults
 
 The defaults dictionary can contain default settings for
-experiment analysis parameters, e.g.::
+experiment analysis parameters (see :ref:`state-parameters`_), e.g.::
 
     defaults = {'epoch': 'my_epoch',
                 'cov': 'noreg',
@@ -333,8 +379,6 @@ Pre-processing (raw)
 .. py:attribute:: MneExperiment.raw
 
 Define a pre-processing pipeline as a series of linked processing steps:
-
-.. currentmodule:: eelbrain.pipeline
 
 .. autosummary::
    :toctree: generated
@@ -537,8 +581,10 @@ smoothing_steps : ``None`` | :class:`int`
     Number of smoothing steps to display data.
 
 
-Analysis parameters
-===================
+.. _state-parameters:
+
+State Parameters
+================
 
 These are parameters that can be set after an :class:`MneExperiment` has been
 initialized to affect the analysis, for example::
@@ -553,6 +599,17 @@ filter, and to use sensor covariance matrices without regularization.
    :local:
 
 
+.. _state-session:
+
+``session``
+-------
+
+Which raw session to work with (one of :attr:`MneExperiment.sessions`; usually
+set automatically when :ref:`state-epoch`_ is set)
+
+
+.. _state-raw:
+
 ``raw``
 -------
 
@@ -561,12 +618,16 @@ all the processing steps defined in :attr:`MneExperiment.raw`, as well as
 ``"raw"`` for using unprocessed raw data.
 
 
+.. _state-group:
+
 ``group``
 ---------
 
 Any group defined in :attr:`MneExperiment.groups`. Will restrict the analysis
 to that group of subjects.
 
+
+.. _state-epoch:
 
 ``epoch``
 ---------
@@ -575,6 +636,8 @@ Any epoch defined in :attr:`MneExperiment.epochs`. Specify the epoch on which
 the analysis should be conducted.
 
 
+.. _state-rej:
+
 ``rej`` (trial rejection)
 -------------------------
 
@@ -582,6 +645,27 @@ Trial rejection can be turned off ``e.set(rej='')``, meaning that no trials are
 rejected, and back on, meaning that the corresponding rejection files are used
 ``e.set(rej='man')``.
 
+
+.. _state-model:
+
+``model``
+---------
+
+While the :ref:`state-epoch` state parameter determines which events are
+included when loading data, the ``model`` parameter determines how these events
+are split into different condition cells. The parameter should be set to the
+name of a categorial event variable which defines the desired cells.
+In the :ref:`MneExperiment-example`,
+``e.load_evoked(epoch='target', model='prediction')``
+would load responses to the target, averaged for expected and unexpected trials.
+
+Cells can also be defined based on crossing two variables using the ``%`` sign.
+In the :ref:`MneExperiment-example`, to load corresponding primes together with
+the targets, you would use
+``e.load_evoked(epoch='word', model='stimulus % prediction')``.
+
+
+.. _state-equalize_evoked_count:
 
 ``equalize_evoked_count``
 -------------------------
@@ -596,6 +680,8 @@ epochs goes into each cell of the model.
     Make sure the same number of epochs is used in each cell by discarding
     epochs.
 
+
+.. _state-cov:
 
 ``cov``
 -------
@@ -613,6 +699,8 @@ The method for correcting the sensor covariance.
     Use automatic selection of the optimal regularization method.
 
 
+.. _state-src:
+
 ``src``
 -------
 
@@ -625,10 +713,15 @@ The source space to use.
    10 mm grid).
 
 
+.. _state-inv:
+
 ``inv``
 -------
 
-To set the inverse solution use :meth:`MneExperiment.set_inv`.
+What inverse solution to use for source localization. This parameter can also be
+set with :meth:`MneExperiment.set_inv`, which has a more detailed description of
+the options. The inverse solution can be set directly using the appropriate
+string as in ``e.set(inv='fixed-1-MNE')``.
 
 
 .. _analysis-params-parc:
@@ -637,13 +730,7 @@ To set the inverse solution use :meth:`MneExperiment.set_inv`.
 ---------------------------------
 
 The parcellation determines how the brain surface is divided into regions.
-Parcellation are mainly used in tests and report generation:
-
- - ``parc`` or ``mask`` arguments for :meth:`MneExperiment.make_report`
- - ``parc`` argument to :meth:`MneExperiment.make_report_roi`
-
-When source estimates are loaded, the parcellation can also be used to index
-regions in the source estiomates. Predefined parcellations:
+There are a number of built-in parcellations:
 
 Freesurfer Parcellations
     ``aparc.a2005s``, ``aparc.a2009s``, ``aparc``, ``aparc.DKTatlas``,
@@ -659,8 +746,27 @@ Freesurfer Parcellations
     One large region encompassing occipital and temporal lobe in each
     hemisphere.
 
+Additional parcellation can be defined in the :attr:`MneExperiment.parc`
+attribute. Parcellations are used in different contexts:
 
-.. _analysis-params-connectivity:
+ - When loading source space data, the current ``parc`` state determines the
+   parcellation of the souce space (change the state parameter with
+   ``e.set(parc='aparc')``).
+ - When loading tests, setting the ``parc`` parameter treats each label as a
+   separate ROI. For spatial cluster-based tests that means that no clusters can
+   cross the boundary between two labels. On the other hand, using the ``mask``
+   parameter treats all named labels as connected surface, but discards any
+   sources labeled as ``"unknown"``. For example, loading a test with
+   ``mask='lobes'`` will perform a whole-brain test on the cortex, while
+   discarding subcortical sources.
+
+Parcellations are set with their name, with the expception of
+:class:`SeededParc`: for those, the name is followed by the radious in mm, for
+example, to use seeds defined in a parcellation named ``'myparc'`` with a radius
+of 25 mm around the seed, use ``e.set(parc='myparc-25')``.
+
+
+.. _state-connectivity:
 
 ``connectivity``
 ----------------
@@ -677,7 +783,7 @@ that are at most 15 mm apart. This parameter currently does not affect sensor
 space connectivity.
 
 
-.. _analysis-params-select_clusters:
+.. _state-select_clusters:
 
 ``select_clusters`` (cluster selection criteria)
 ------------------------------------------------

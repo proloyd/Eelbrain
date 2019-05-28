@@ -5,6 +5,7 @@ Repeated measures ANOVA
 Based on [1]_.
 
 """
+# Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
 from eelbrain import *
 
 y = Var([7,  3,  6,  6,  5,  8,  6,  7,

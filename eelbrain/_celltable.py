@@ -125,16 +125,19 @@ class Celltable:
                     sub = sub[sort_idx]
             y = coercion(y, sub, ds, n_cases)
 
+        sort_idx = aggregate = None
         if match is not None:
             match = ascategorial(match, sub, ds, n_cases)
             cell_model = match if x is None else x % match
-            sort_idx = None
             if len(cell_model) > len(cell_model.cells):
+                aggregate = cell_model
+
+            if aggregate is not None:
                 # need to aggregate
-                y = y.aggregate(cell_model)
-                match = match.aggregate(cell_model)
+                y = y.aggregate(aggregate)
+                match = match.aggregate(aggregate)
                 if x is not None:
-                    x = x.aggregate(cell_model)
+                    x = x.aggregate(aggregate)
                     if cat is not None:
                         sort_idx = x.sort_index(order=cat)
             else:
@@ -144,11 +147,14 @@ class Celltable:
                     sort_X_idx = X_.sort_index(order=cat)
                     sort_idx = sort_idx[sort_X_idx]
 
-            if (sort_idx is not None) and (not np.all(np.diff(sort_idx) == 1)):
-                y = y[sort_idx]
-                match = match[sort_idx]
-                if x is not None:
-                    x = x[sort_idx]
+            if sort_idx is not None:
+                if sort_idx[0] == 0 and np.all(np.diff(sort_idx) == 1):
+                    sort_idx = None
+                else:
+                    y = y[sort_idx]
+                    match = match[sort_idx]
+                    if x is not None:
+                        x = x[sort_idx]
 
         if dtype is not None and y.x.dtype != dtype:
             y = y.astype(dtype)
@@ -160,6 +166,11 @@ class Celltable:
         self.match = match
         self.coercion = coercion.__name__
         self.n_cases = len(y)
+        # allow aligning additional variables
+        self._n_cases = n_cases
+        self._sub = sub
+        self._aggregate = aggregate
+        self._sort_idx = sort_idx
 
         # extract cell data
         self.data = {}
@@ -212,6 +223,27 @@ class Celltable:
 
     def __len__(self):
         return self.n_cells
+
+    def _align(self, y, rm=False):
+        """Align an additional variable to the celltable
+
+        Parameters
+        ----------
+        y : data-object
+            Data-object to align.
+        rm : bool
+            If the celltable is a repeated-measures celltable, align ``y`` to
+            the repeated measures table rather than the long form table.
+        """
+        y_ = asdataobject(y, self._sub, n=self._n_cases)
+        if self._aggregate is not None:
+            y_ = y_.aggregate(self._aggregate)
+        if self._sort_idx is not None:
+            y_ = y_[self._sort_idx]
+        if rm:
+            return {cell: y_[index] for cell, index in self.data_indexes.items()}
+        else:
+            return y_
 
     def cellname(self, cell, delim=' '):
         """Produce a str label for a cell.

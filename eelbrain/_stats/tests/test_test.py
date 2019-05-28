@@ -1,7 +1,7 @@
 # Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
-from nose.tools import eq_, assert_almost_equal
 from numpy.testing import assert_array_equal
 import numpy as np
+import pytest
 import scipy.stats
 
 from eelbrain import datasets, test
@@ -15,39 +15,39 @@ def test_correlations():
 
     res = test.correlations('fltvar', 'fltvar2', ds=ds)
     print(res)
-    eq_(str(res[2][0]).strip(), '.398')
+    assert str(res[2][0]).strip() == '.398'
     res = test.correlations('fltvar', 'fltvar2', ds=ds, asds=True)
-    assert_almost_equal(res[0, 'r'], .398, 3)
+    assert res[0, 'r'] == pytest.approx(.398, abs=1e-3)
     res = test.Correlation('fltvar', 'fltvar2', ds=ds)
-    assert_almost_equal(res.r, .398, 3)
+    assert res.r == pytest.approx(.398, abs=1e-3)
 
     res = test.correlations('fltvar', 'fltvar2', 'A', ds=ds)
     print(res)
-    eq_(str(res[2][0]).strip(), 'a1')
-    eq_(str(res[2][1]).strip(), '-.149')
-    eq_(str(res[3][1]).strip(), '.740')
+    assert str(res[2][0]).strip() == 'a1'
+    assert str(res[2][1]).strip() == '-.149'
+    assert str(res[3][1]).strip() == '.740'
     res = test.correlations('fltvar', 'fltvar2', 'A', ds=ds, asds=True)
-    eq_(res[0, 'A'], 'a1')
-    assert_almost_equal(res[0, 'r'], -0.149, 3)
-    assert_almost_equal(res[1, 'r'], .740, 3)
+    assert res[0, 'A'] == 'a1'
+    assert res[0, 'r'] == pytest.approx(-0.149, abs=1e-3)
+    assert res[1, 'r'] == pytest.approx(.740, abs=1e-3)
     res = test.Correlation('fltvar', 'fltvar2', "A == 'a1'", ds)
-    assert_almost_equal(res.r, -0.149, 3)
+    assert res.r == pytest.approx(-0.149, abs=1e-3)
 
     res = test.correlations('fltvar', 'fltvar2', 'A%B', ds=ds)
     print(res)
-    eq_(str(res[2][2]).strip(), '-.276')
+    assert str(res[2][2]).strip() == '-.276'
     res = test.correlations('fltvar', 'fltvar2', 'A%B', ds=ds, asds=True)
-    assert_almost_equal(res[0, 'r'], -0.276, 3)
+    assert res[0, 'r'] == pytest.approx(-0.276, abs=1e-3)
 
     res = test.correlations('fltvar', ('fltvar2', 'intvar'), 'A%B', ds=ds)
     print(res)
-    eq_(str(res[2][1]).strip(), 'a1')
-    eq_(str(res[2][2]).strip(), 'b1')
-    eq_(str(res[2][3]).strip(), '-.276')
+    assert str(res[2][1]).strip() == 'a1'
+    assert str(res[2][2]).strip() == 'b1'
+    assert str(res[2][3]).strip() == '-.276'
     res = test.correlations('fltvar', ('fltvar2', 'intvar'), 'A%B', ds=ds, asds=True)
-    assert_almost_equal(res[0, 'r'], -0.276, 3)
+    assert res[0, 'r'] == pytest.approx(-0.276, abs=1e-3)
     res = test.Correlation('fltvar', 'intvar', "(A=='a1')&(B=='b1')", ds)
-    assert_almost_equal(res.r, 0.315, 3)
+    assert res.r == pytest.approx(0.315, abs=1e-3)
 
 
 def test_star():
@@ -77,17 +77,17 @@ def test_ttest():
     # TTest1Samp
     res = test.TTest1Sample('fltvar', ds=ds)
     t, p = scipy.stats.ttest_1samp(ds['fltvar'], 0)
-    assert_almost_equal(res.t, t, 10)
-    assert_almost_equal(res.p, p, 10)
+    assert res.t == pytest.approx(t, 10)
+    assert res.p == pytest.approx(p, 10)
     res = test.TTest1Sample('fltvar', ds=ds, tail=1)
-    assert_almost_equal(res.t, t, 10)
-    assert_almost_equal(res.p, p / 2., 10)
+    assert res.t == pytest.approx(t, 10)
+    assert res.p == pytest.approx(p / 2., 10)
 
     # TTestInd
     res = test.TTestInd('fltvar', 'A', 'a1', 'a2', ds=ds)
     t, p = scipy.stats.ttest_ind(ds[a1_index, 'fltvar'], ds[a2_index, 'fltvar'])
-    assert_almost_equal(res.t, t, 10)
-    assert_almost_equal(res.p, p, 10)
+    assert res.t == pytest.approx(t, 10)
+    assert res.p == pytest.approx(p, 10)
 
     # TTestRel
     res = test.TTestRel('fltvar', 'A', 'a1', 'a2', 'rm', "B=='b1'", ds)
@@ -96,28 +96,35 @@ def test_ttest():
     difference = a1 - a2
     t, p = scipy.stats.ttest_rel(a1, a2)
     assert_array_equal(res.difference.x, difference)
-    eq_(res.df, len(a1) - 1)
-    eq_(res.tail, 0)
-    assert_almost_equal(res.t, t, 10)
-    assert_almost_equal(res.p, p, 10)
+    assert res.df == len(a1) - 1
+    assert res.tail == 0
+    assert res.t == pytest.approx(t)
+    assert res.p == pytest.approx(p)
     print(res)
     print(asfmtext(res))
 
     res = test.TTestRel('fltvar', 'A', 'a1', 'a2', 'rm', "B=='b1'", ds, 1)
     assert_array_equal(res.difference.x, difference)
-    eq_(res.df, len(a1) - 1)
-    eq_(res.tail, 1)
-    assert_almost_equal(res.t, t, 10)
-    assert_almost_equal(res.p, p / 2 if t > 0 else 1 - p / 2, 10)
+    assert res.df == len(a1) - 1
+    assert res.tail == 1
+    assert res.t == pytest.approx(t)
+    assert res.p == pytest.approx(p / 2)
     print(res)
     print(asfmtext(res))
 
+    res = test.TTestRel('fltvar', 'A', 'a2', 'a1', 'rm', "B=='b1'", ds, 1)
+    assert_array_equal(res.difference.x, -difference)
+    assert res.df == len(a1) - 1
+    assert res.tail == 1
+    assert res.t == pytest.approx(-t)
+    assert res.p == pytest.approx(1 - p / 2)
+
     res = test.TTestRel('fltvar', 'A', 'a1', 'a2', 'rm', "B=='b1'", ds, -1)
     assert_array_equal(res.difference.x, difference)
-    eq_(res.df, len(a1) - 1)
-    eq_(res.tail, -1)
-    assert_almost_equal(res.t, t, 10)
-    assert_almost_equal(res.p, p / 2 if t < 0 else 1 - p / 2, 10)
+    assert res.df == len(a1) - 1
+    assert res.tail == -1
+    assert res.t == pytest.approx(t)
+    assert res.p == pytest.approx(1 - p / 2)
     print(res)
     print(asfmtext(res))
     # alternative argspec

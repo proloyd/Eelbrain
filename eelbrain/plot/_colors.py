@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
 """Color tools for plotting."""
 from collections import Iterator
@@ -7,10 +6,10 @@ import operator
 
 import numpy as np
 import matplotlib as mpl
-from matplotlib.colors import LinearSegmentedColormap, Normalize
+from matplotlib.colors import LinearSegmentedColormap, Normalize, to_rgb
 from matplotlib.colorbar import ColorbarBase
 
-from .._colorspaces import to_rgb, oneway_colors, twoway_colors, SymmetricNormalize
+from .._colorspaces import oneway_colors, twoway_colors, SymmetricNormalize
 from .._data_obj import Factor, Interaction, cellname
 from .._utils import IS_WINDOWS
 from ._base import EelFigure, Layout, find_axis_params_data, fix_vlim_for_cmap

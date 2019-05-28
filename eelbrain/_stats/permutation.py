@@ -10,6 +10,8 @@ from .._utils import intervals
 from . import vector
 
 
+# Keep local RNG independent of public RNG
+RNG = random.Random()
 _YIELD_ORIGINAL = 0
 # for testing purposes, yield original order instead of permutations
 
@@ -45,7 +47,7 @@ def _resample_params(N, samples):
     return n_samples, samples
 
 
-def permute_order(n, samples=10000, replacement=False, unit=None, seed=0):
+def permute_order(n, samples=10000, replacement=False, unit=None, rng=None):
     """Generator function to create indices to shuffle n items
 
     Parameters
@@ -62,10 +64,8 @@ def permute_order(n, samples=10000, replacement=False, unit=None, seed=0):
         specified, resampling proceeds by first resampling the categories of
         unit (with or without replacement) and then shuffling the values
         within units (no replacement).
-    seed : None | int
-        Seed the random state of the relevant randomization module
-        (:mod:`random` or :mod:`numpy.random`) to make replication possible.
-        None to skip seeding (default 0).
+    rng : numpy.random.RandomState
+        Random number generator. By default, a random state with seed 0 is used.
 
     Returns
     -------
@@ -74,8 +74,7 @@ def permute_order(n, samples=10000, replacement=False, unit=None, seed=0):
     n = int(n)
     samples = int(samples)
     if samples < 0:
-        err = "Complete permutation for resampling through reordering"
-        raise NotImplementedError(err)
+        raise NotImplementedError("Complete permutation for resampling through reordering")
 
     if _YIELD_ORIGINAL:
         original = np.arange(n)
@@ -83,17 +82,17 @@ def permute_order(n, samples=10000, replacement=False, unit=None, seed=0):
             yield original
         return
 
-    if seed is not None:
-        np.random.seed(seed)
+    if rng is None:
+        rng = np.random.RandomState(0)
 
     if unit is None or unit is False:
         if replacement:
             for _ in range(samples):
-                yield np.random.randint(n, n)
+                yield rng.randint(n, n)
         else:
             index = np.arange(n)
             for _ in range(samples):
-                np.random.shuffle(index)
+                rng.shuffle(index)
                 yield index
     else:
         if replacement:
@@ -103,19 +102,19 @@ def permute_order(n, samples=10000, replacement=False, unit=None, seed=0):
         unit_idxs = [np.flatnonzero(unit == cell) for cell in unit.cells]
         if isinstance(unit, NestedEffect):
             dst_idxs_iter = ((unit_idxs[i] for i in order)
-                             for order in permute_order(len(unit_idxs), samples, seed=None))
+                             for order in permute_order(len(unit_idxs), samples, rng=rng))
         else:
             dst_idxs_iter = repeat(unit_idxs, samples)
 
         for dst_idxs in dst_idxs_iter:
             for src, dst in zip(unit_idxs, dst_idxs):
                 v = idx_orig[src]
-                np.random.shuffle(v)
+                rng.shuffle(v)
                 idx_perm[dst] = v
             yield idx_perm
 
 
-def permute_sign_flip(n, samples=10000, seed=0, out=None):
+def permute_sign_flip(n, samples=10000, rng=None, out=None):
     """Iterate over indices for ``samples`` permutations of the data
 
     Parameters
@@ -125,9 +124,8 @@ def permute_sign_flip(n, samples=10000, seed=0, out=None):
     samples : int
         Number of samples to yield. If < 0, all possible permutations are
         performed.
-    seed : None | int
-        Seed the random state of the :mod:`random` module to make replication 
-        possible. ``None`` to skip seeding (default 0).
+    rng : random.Random
+        Random number generator.
     out : array of int8  (n,)
         Buffer for the ``sign`` variable that is yielded in each iteration.
 
@@ -138,8 +136,8 @@ def permute_sign_flip(n, samples=10000, seed=0, out=None):
         but its content modified in every iteration).
     """
     n = int(n)
-    if seed is not None:
-        random.seed(seed)
+    if rng is None and samples >= 0:
+        rng = random.Random(0)
 
     if out is None:
         out = np.empty(n, np.int8)
@@ -152,7 +150,7 @@ def permute_sign_flip(n, samples=10000, seed=0, out=None):
         n_groups = ceil(n / 62.)
         group_size = int(ceil(n / n_groups))
         out_parts = chain(range(0, n, group_size), [n])
-        for _ in zip(*(permute_sign_flip(stop - start, samples, None, out[start: stop])
+        for _ in zip(*(permute_sign_flip(stop - start, samples, rng, out[start: stop])
                        for start, stop in intervals(out_parts))):
             yield out
         return
@@ -164,7 +162,7 @@ def permute_sign_flip(n, samples=10000, seed=0, out=None):
         sample_sequences = range(1, n_perm_possible)
     else:
         # random resampling
-        sample_sequences = random.sample(range(1, n_perm_possible), samples)
+        sample_sequences = rng.sample(range(1, n_perm_possible), samples)
 
     for seq in sample_sequences:
         out.fill(1)
@@ -173,7 +171,7 @@ def permute_sign_flip(n, samples=10000, seed=0, out=None):
         yield out
 
 
-def resample(y, samples=10000, replacement=False, unit=None, seed=0):
+def resample(y, samples=10000, replacement=False, unit=None):
     """
     Generator function to resample a dependent variable (y) multiple times
 
@@ -191,10 +189,6 @@ def resample(y, samples=10000, replacement=False, unit=None, seed=0):
         specified, resampling proceeds by first resampling the categories of
         unit (with or without replacement) and then shuffling the values
         within units (no replacement).
-    seed : None | int
-        Seed the random state of the relevant randomization module
-        (:mod:`random` or :mod:`numpy.random`) to make replication possible.
-        None to skip seeding (default 0).
 
     Returns
     -------
@@ -209,23 +203,20 @@ def resample(y, samples=10000, replacement=False, unit=None, seed=0):
     else:
         raise TypeError("Need Var or NDVar")
 
-    out = y.copy('{name}_resampled')
+    out = y.copy(f'{y.name}_resampled')
 
-    for index in permute_order(len(out), samples, replacement, unit, seed):
+    for index in permute_order(len(out), samples, replacement, unit):
         out.x[index] = y.x
         yield out
 
 
-def random_seeds(samples, seed=0):
+def random_seeds(samples):
     """Sequence of seeds for permutation based on random numbers
 
     Parameters
     ----------
     samples : int
         Number of samples to yield.
-    seed : None | int
-        Seed the random state of the :mod:`random` module to make replication
-        possible. ``None`` to skip seeding (default 0).
 
     Returns
     -------
@@ -233,12 +224,11 @@ def random_seeds(samples, seed=0):
         Sign for each case (``1`` or ``-1``; ``sign`` is the same array object
         but its content modified in every iteration).
     """
-    if seed is not None:
-        np.random.seed(seed)
-    return np.random.randint(2**32, size=samples, dtype=np.uint32)
+    rng = np.random.RandomState(0)
+    return rng.randint(2**32, size=samples, dtype=np.uint32)
 
 
-def _sample_xi_by_rejection(n, seed=0):
+def _sample_xi_by_rejection(n, seed):
     """Return a sample (or samples) from the distribution p(x) = 2 * np.sin(x/2) ** 2 / pi
 
     See [1]_ for why samples from this distribution is required to sample
@@ -250,22 +240,20 @@ def _sample_xi_by_rejection(n, seed=0):
     ----------
     n : int
         Number of the samples.
-    seed : None | int
-        Seed the random state of the relevant randomization module
-        (:mod:`random` or :mod:`numpy.random`) to make replication possible.
-        None to skip seeding (default 0).
+    seed : int
+        Seed for the random state.
 
     Returns
     -------
     ndarray
         samples drawn from the distribution
     """
-    random.seed(seed)
+    RNG.seed(seed)  # could lead to conflict with threading
     samples = np.empty(n)
     i = 0
     while i < n:
-        z = random.random() * pi
-        u = random.random() * 2 / pi
+        z = RNG.random() * pi
+        u = RNG.random() * 2 / pi
 
         if u <= 2 * sin(z / 2) ** 2 / pi:
             samples[i] = z
@@ -274,25 +262,23 @@ def _sample_xi_by_rejection(n, seed=0):
     return samples
 
 
-def rand_rotation_matrices(n, seed=0):
+def rand_rotation_matrices(n: int, seed: int):
     """Function to create random rotation matrices in 3D
 
     Parameters
     ----------
     n : int
         Number of rotation matrices to return.
-    seed : None | int
-        Seed the random state of the relevant randomization module
-        (:mod:`random` or :mod:`numpy.random`) to make replication possible.
-        None to skip seeding (default 0).
+    seed : int
+        Seed the random state.
 
     Returns
     -------
     rotation : array (n, 3, 3)
         Sampled rotation matrices.
     """
-    np.random.seed(seed)
-    phi = np.arccos(np.random.uniform(-1, 1, n))
-    theta = np.random.uniform(0, 2 * pi, n)
+    rng = np.random.RandomState(seed)
+    phi = np.arccos(rng.uniform(-1, 1, n))
+    theta = rng.uniform(0, 2 * pi, n)
     xi = _sample_xi_by_rejection(n, seed)
     return vector.rotation_matrices(phi, theta, xi, np.empty((n, 3, 3)))

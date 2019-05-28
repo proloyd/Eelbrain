@@ -15,7 +15,7 @@ from .._exceptions import DefinitionError
 from .._io.fiff import KIT_NEIGHBORS
 from .._ndvar import filter_data
 from .._text import enumeration
-from .._utils import ask, user_activity
+from .._utils import as_sequence, ask, user_activity
 from ..mne_fixes import CaptureLog
 from .definitions import compound, typed_arg
 from .exceptions import FileMissing
@@ -96,7 +96,10 @@ class RawSource(RawPipe):
     Parameters
     ----------
     filename : str
-        Pattern for filename (default ``'{subject}_{recording}-raw.fif'``).
+        Pattern for filenames. The pattern should contain the fields
+        ``{subject}`` and ``{recording}`` (which internally is expanded to
+        ``session`` and, if applicable, ``visit``;
+        default ``'{subject}_{recording}-raw.fif'``).
     reader : callable
         Function for reading data (default is :func:`mne.io.read_raw_fif`).
     sysname : str
@@ -353,12 +356,18 @@ class RawFilter(CachedRawPipe):
     ----------
     source : str
         Name of the raw pipe to use for input data.
+    l_freq : scalar | None
+        Low cut-off frequency in Hz.
+    h_freq : scalar | None
+        High cut-off frequency in Hz.
+    cache : bool
+        Cache the resulting raw files (default False).
     ...
         :meth:`mne.io.Raw.filter` parameters.
     """
 
-    def __init__(self, source, l_freq=None, h_freq=None, **kwargs):
-        CachedRawPipe.__init__(self, source)
+    def __init__(self, source, l_freq=None, h_freq=None, cache=True, **kwargs):
+        CachedRawPipe.__init__(self, source, cache)
         self.args = (l_freq, h_freq)
         self.kwargs = kwargs
         # mne backwards compatibility (fir_design default change 0.15 -> 0.16)
@@ -525,6 +534,18 @@ class RawICA(CachedRawPipe):
         picks = mne.pick_types(raw.info, eeg=True, ref_meg=False)
         return ica.ch_names == [raw.ch_names[i] for i in picks]
 
+    def load_concatenated_source_raw(self, subject, session, visit):
+        sessions = as_sequence(session)
+        recordings = [compound((session, visit)) for session in sessions]
+        bad_channels = self.load_bad_channels(subject, recordings[0])
+        raw = self.source.load(subject, recordings[0], False)
+        raw.info['bads'] = bad_channels
+        for recording in recordings[1:]:
+            raw_ = self.source.load(subject, recording, False)
+            raw_.info['bads'] = bad_channels
+            raw.append(raw_)
+        return raw
+
     def make_ica(self, subject, visit):
         path = self._ica_path(subject, visit)
         recordings = [compound((session, visit)) for session in self.session]
@@ -598,7 +619,22 @@ class RawApplyICA(CachedRawPipe):
 
     Notes
     -----
-    This pipe inherits bad channels form the ICA.
+    This pipe inherits bad channels from the ICA.
+
+    Examples
+    --------
+    Estimate ICA components with 1-40 Hz band-pass filter and apply the ICA
+    to data that is high pass filtered at 0.1 Hz::
+
+        class Experiment(MneExperiment):
+
+            raw = {
+                '1-40': RawFilter('raw', 1, 40),
+                'ica': RawICA('1-40', 'session', 'extended-infomax', n_components=0.99),
+                '0.1-40': RawFilter('raw', 0.1, 40),
+                '0.1-40-ica': RawApplyICA('0.1-40', 'ica'),
+            }
+
     """
 
     def __init__(self, source, ica, cache=False):

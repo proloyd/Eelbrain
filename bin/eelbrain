@@ -1,5 +1,4 @@
 #!/usr/bin/env pythonw
-# -*- coding: utf-8 -*-
 # when installed through setup.py, the first line is replaced with the normal,
 # non-framework build python. Replace bin/python after ENV with::
 # #!/Users/christian/anaconda/envs/ENV/python.app/Contents/MacOS/python

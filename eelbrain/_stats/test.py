@@ -8,6 +8,7 @@ import scipy.stats
 from .. import fmtxt
 from .._celltable import Celltable
 from .._data_obj import (
+    CategorialArg, CellArg, IndexArg, VarArg, NumericArg,
     Dataset, Factor, Interaction, Var, NDVar,
     ascategorial, asfactor, asnumeric, assub, asvar,
     cellname, dataobj_repr, nice_label,
@@ -45,20 +46,24 @@ class Correlation:
     df : int
         Degrees of freedom.
     """
-    def __init__(self, y, x, sub=None, ds=None):
-        sub = assub(sub, ds)
-        y = asnumeric(y, sub, ds)
-        x = asnumeric(x, sub, ds)
+    def __init__(
+            self,
+            y: NumericArg,
+            x: NumericArg,
+            sub: IndexArg = None,
+            ds: Dataset = None,
+    ):
+        sub, n = assub(sub, ds, return_n=True)
+        y, n = asnumeric(y, sub, ds, n, return_n=True)
+        x = asnumeric(x, sub, ds, n)
         if type(y) is not type(x):
-            raise TypeError("y and x must be same type; got type(y)=%r, "
-                            "type(x)=%r" % (type(y), type(x)))
+            raise TypeError(f"y and x must be same type; got type(y)={type(y)}, type(x)={type(x)}")
         elif isinstance(y, Var):
             x_y = y.x
             x_x = x.x
         elif isinstance(y, NDVar):
             if y.dims != x.dims:
-                raise ValueError("y and x have different dimensions; "
-                                 "y.dims=%r, x.dims=%r" % (y.dims, x.dims))
+                raise ValueError(f"y and x have different dimensions; y.dims={y.dims}, x.dims={x.dims}")
             x_y = y.x.ravel()
             x_x = x.x.ravel()
         else:
@@ -486,7 +491,14 @@ class TTest1Sample(TTest):
     df : int
         Degrees of freedom.
     """
-    def __init__(self, y, match=None, sub=None, ds=None, tail=0):
+    def __init__(
+            self,
+            y: VarArg,
+            match: CategorialArg = None,
+            sub: IndexArg = None,
+            ds: Dataset = None,
+            tail: int = 0,
+    ):
         ct = Celltable(y, None, match, sub, ds=ds, coercion=asvar)
         n = len(ct.y)
         if n <= 2:
@@ -542,8 +554,17 @@ class TTestInd(TTest):
     df : int
         Degrees of freedom.
     """
-    def __init__(self, y, x, c1=None, c0=None, match=None, sub=None, ds=None,
-                 tail=0):
+    def __init__(
+            self,
+            y: VarArg,
+            x: CategorialArg,
+            c1: CellArg = None,
+            c0: CellArg = None,
+            match: CategorialArg = None,
+            sub: IndexArg = None,
+            ds: Dataset = None,
+            tail: int = 0,
+    ):
         ct = Celltable(y, x, match, sub, cat=(c1, c0), ds=ds, coercion=asvar)
         c1, c0 = ct.cat
 
@@ -614,8 +635,17 @@ class TTestRel(TTest):
     c0_mean : float
         Mean of condition ``c0``.
     """
-    def __init__(self, y, x, c1=None, c0=None, match=None, sub=None, ds=None,
-                 tail=0):
+    def __init__(
+            self,
+            y: VarArg,
+            x: CategorialArg,
+            c1: CellArg = None,
+            c0: CellArg = None,
+            match: CategorialArg = None,
+            sub: IndexArg = None,
+            ds: Dataset = None,
+            tail: int = 0,
+    ):
         if match is None:
             assert c1 is None and c0 is None
             y1 = asvar(y, sub, ds)

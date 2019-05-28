@@ -46,6 +46,8 @@ def test_plot_topomap_mne():
 def test_plot_topo_butterfly():
     "Test plot.TopoButterfly"
     ds = datasets.get_uts(utsnd=True)
+
+    # single row
     p = plot.TopoButterfly('utsnd', ds=ds)
     p.set_time(0.2)
     # t keypress on topomap
@@ -53,14 +55,24 @@ def test_plot_topo_butterfly():
     event = KeyEvent('test', p.canvas, 't', x, y, wx.KeyEvent())
     p._on_key_press(event)
     p.close()
+
     p = plot.TopoButterfly('utsnd', ds=ds, vmax=0.2, w=6)
     p.close()
+
+    # multiple rows
     p = plot.TopoButterfly('utsnd', 'A%B', ds=ds, w=6)
     if not IS_WINDOWS:
         assert (*p.figure.get_size_inches(),) == (6, 12)
+    # t keypress on topomaps
+    for ax in p.topo_axes:
+        x, y = ax.transAxes.transform((.5, .5))
+        event = KeyEvent('test', p.canvas, 't', x, y, wx.KeyEvent())
+        p._on_key_press(event)
     p.close()
+
     p = plot.TopoButterfly('utsnd', mark=[1, 2], ds=ds)
     p.close()
+
     p = plot.TopoButterfly('utsnd', mark=['1', '2'], ds=ds)
     p.set_vlim(2)
     assert p.get_vlim() == (-2.0, 2.0)

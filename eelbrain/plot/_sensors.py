@@ -317,6 +317,8 @@ class SensorMapMixin:
         """
         self.__label_color = 'k'
         self.__sensor_plots = sensor_plots
+        if not self._has_frame:
+            return
         # find current label text
         sel = self.__label_option_args.index(sensor_plots[0]._label_text)
         self.__LabelChoice.SetSelection(sel)

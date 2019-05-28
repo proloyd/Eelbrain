@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 """Denoising source separation"""
 
 # Authors: Daniel McCloy <drmccloy@uw.edu>

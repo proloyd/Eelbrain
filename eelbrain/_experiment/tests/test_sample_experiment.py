@@ -7,7 +7,7 @@ import shutil
 from warnings import catch_warnings, filterwarnings
 
 import numpy as np
-from numpy.testing import assert_almost_equal
+from numpy.testing import assert_almost_equal, assert_array_equal
 
 from eelbrain import *
 from eelbrain.pipeline import *
@@ -236,6 +236,19 @@ def test_sample():
     assert e.get('raw') == '1-40'
     with pytest.raises(IOError):
         e.load_test('a>v', 0.05, 0.2, 0.05, samples=20, data='sensor', baseline=False)
+
+    # label_events
+    # ------------
+    class Experiment(SampleExperiment):
+        def label_events(self, ds):
+            SampleExperiment.label_events(self, ds)
+            ds = ds.sub("event == 'smiley'")
+            ds['new_var'] = Var([i + 1 for i in ds['i_start']])
+            return ds
+
+    e = Experiment(root)
+    events = e.load_events()
+    assert_array_equal(events['new_var'], [67402, 75306])
 
 
 @requires_mne_sample_data

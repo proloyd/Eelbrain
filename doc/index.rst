@@ -24,7 +24,7 @@ at the `Computational sensorimotor systems lab
 at University of Maryland, College Park.
 
 If you use Eelbrain in work that is published, please acknowledge it by citing
-it with the appropriate DOI for the version you used.
+it with the appropriate version and DOI.
 
 
 Manual

@@ -51,17 +51,15 @@ def _get_continuous(n_samples=100, seed=0):
          - ``h1`` and ``h2``: Kernels corresponding to ``x1`` and ``x2``
          - ``y``: convolution of ``(x1 * h1) + (x2 * h2)``
     """
-    if seed is not None:
-        np.random.seed(seed)
+    random = np.random if seed is None else np.random.RandomState(seed)
     time = UTS(0, 0.1, n_samples)
     h_time = UTS(0, 0.1, 10)
     xdim = Scalar('xdim', [0, 1])
 
-    x1 = NDVar(np.random.normal(0, 1, (n_samples,)), (time,), name='x1')
+    x1 = NDVar(random.normal(0, 1, (n_samples,)), (time,), name='x1')
     h1 = NDVar(np.array([0, 0, 1, 3, 0, 0, 0, 0, 2, 3]), (h_time,), name='h1')
 
-    x2 = NDVar(np.random.normal(0, 1, (2, n_samples,)),
-               (xdim, time), name='x2')
+    x2 = NDVar(random.normal(0, 1, (2, n_samples,)), (xdim, time), name='x2')
     h2 = NDVar(np.array([[0, 0, 0, 0, 0, 0, -1, -3, 0, 0],
                          [0, 0, 2, 2, 0, 0, 0, 0, 0, 0]]),
                (xdim, h_time), name='h2')
@@ -209,7 +207,7 @@ def get_mne_sample(tmin=-0.1, tmax=0.4, baseline=(None, 0), sns=False,
     src : False | 'ico' | 'vol'
         Add source space data as NDVar as ``ds['src']`` (default ``False``).
     sub : str | list | None
-        Expresion for subset of events to load. For a very small dataset use e.g.
+        Expression for subset of events to load. For a very small dataset use e.g.
         ``[0,1]``.
     ori : 'free' | 'fixed' | 'vector'
         Orientation of sources.
@@ -355,8 +353,7 @@ def get_uts(utsnd=False, seed=0, nrm=False, vector3d=False):
     ds : Dataset
         Datasets with data from random distributions.
     """
-    if seed is not None:
-        np.random.seed(seed)
+    random = np.random if seed is None else np.random.RandomState(seed)
 
     ds = Dataset()
 
@@ -367,18 +364,18 @@ def get_uts(utsnd=False, seed=0, nrm=False, vector3d=False):
     ds['ind'] = Factor(('R%.2i' % i for i in range(60)), random=True)
 
     # add dependent variables
-    rm_var = np.tile(np.random.normal(size=15), 4)
-    y = np.hstack((np.random.normal(size=45), np.random.normal(1, size=15)))
+    rm_var = np.tile(random.normal(size=15), 4)
+    y = np.hstack((random.normal(size=45), random.normal(1, size=15)))
     y += rm_var
     ds['Y'] = Var(y)
-    ybin = np.random.randint(0, 2, size=60)
+    ybin = random.randint(0, 2, size=60)
     ds['YBin'] = Factor(ybin, labels={0: 'c1', 1: 'c2'})
-    ycat = np.random.randint(0, 3, size=60)
+    ycat = random.randint(0, 3, size=60)
     ds['YCat'] = Factor(ycat, labels={0: 'c1', 1: 'c2', 2: 'c3'})
 
     # add a uts NDVar
     time = UTS(-.2, .01, 100)
-    y = np.random.normal(0, .5, (60, len(time)))
+    y = random.normal(0, .5, (60, len(time)))
     y += rm_var[:, None]
     y[:15, 20:60] += np.hanning(40) * 1  # interaction
     y[:30, 50:80] += np.hanning(30) * 1  # main effect
@@ -394,7 +391,7 @@ def get_uts(utsnd=False, seed=0, nrm=False, vector3d=False):
         sensor = Sensor(locs, sysname='test_sens')
         sensor.set_connectivity(connect_dist=1.75)
 
-        y = np.random.normal(0, 1, (60, 5, len(time)))
+        y = random.normal(0, 1, (60, 5, len(time)))
         y += rm_var[:, None, None]
         # add interaction
         win = np.hanning(50)
@@ -409,7 +406,7 @@ def get_uts(utsnd=False, seed=0, nrm=False, vector3d=False):
         freq = 15.0  # >= 2
         x = np.sin(time.times * freq * 2 * np.pi)
         for i in range(30):
-            shift = np.random.randint(0, 100 / freq)
+            shift = random.randint(0, 100 / freq)
             y[i, 2, 25:75] += 1.1 * win * x[shift: 50 + shift]
             y[i, 3, 25:75] += 1.5 * win * x[shift: 50 + shift]
             y[i, 4, 25:75] += 0.5 * win * x[shift: 50 + shift]
@@ -423,7 +420,7 @@ def get_uts(utsnd=False, seed=0, nrm=False, vector3d=False):
                             i in range(15)], random=True)
 
     if vector3d:
-        x = np.random.normal(0, 1, (60, 3, 100))
+        x = random.normal(0, 1, (60, 3, 100))
         # main effect
         x[:30, 0, 50:80] += np.hanning(30) * 0.7
         x[:30, 1, 50:80] += np.hanning(30) * -0.5
@@ -445,24 +442,23 @@ def get_uv(seed=0, nrm=False, vector=False):
     vector : bool
         Add a 3d vector variable as ``ds['v']`` (default ``False``).
     """
-    if seed is not None:
-        np.random.seed(seed)
+    random = np.random if seed is None else np.random.RandomState(seed)
 
     ds = permute([('A', ('a1', 'a2')),
                   ('B', ('b1', 'b2')),
                   ('rm', ['s%03i' % i for i in range(20)])])
     ds['rm'].random = True
-    ds['intvar'] = Var(np.random.randint(5, 15, 80))
+    ds['intvar'] = Var(random.randint(5, 15, 80))
     ds['intvar'][:20] += 3
-    ds['fltvar'] = Var(np.random.normal(0, 1, 80))
+    ds['fltvar'] = Var(random.normal(0, 1, 80))
     ds['fltvar'][:40] += 1.
-    ds['fltvar2'] = Var(np.random.normal(0, 1, 80))
+    ds['fltvar2'] = Var(random.normal(0, 1, 80))
     ds['fltvar2'][40:] += ds['fltvar'][40:].x
     ds['index'] = Var(np.repeat([True, False], 40))
     if nrm:
         ds['nrm'] = Factor(['s%03i' % i for i in range(40)], tile=2, random=True)
     if vector:
-        x = np.random.normal(0, 1, (80, 3))
+        x = random.normal(0, 1, (80, 3))
         x[:40] += [.3, .3, .3]
         ds['v'] = NDVar(x, (Case, Space('RAS')))
     return ds

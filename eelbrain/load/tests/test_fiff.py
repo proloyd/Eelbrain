@@ -3,16 +3,12 @@
 import os
 from warnings import catch_warnings, filterwarnings
 
-from nose.tools import eq_
-from numpy.testing import assert_array_equal, assert_array_almost_equal
-
 import mne
 from mne import pick_types
+from numpy.testing import assert_array_equal, assert_array_almost_equal
 
 from eelbrain import load
-
-from ...tests.test_data import assert_dataobj_equal
-from eelbrain.testing import requires_mne_sample_data, file_path
+from eelbrain.testing import assert_dataobj_equal, requires_mne_sample_data, file_path
 
 
 FILTER_WARNING = 'The measurement information indicates a low-pass frequency of 40 Hz.'
@@ -61,7 +57,7 @@ def test_load_fiff_sensor():
     raw = mne.io.read_raw_kit(umd_sqd_path)
 
     sensor = load.fiff.sensor_dim(raw)
-    eq_(sensor.sysname, 'KIT-UMD-3')
+    assert sensor.sysname == 'KIT-UMD-3'
 
 
 @requires_mne_sample_data
@@ -74,7 +70,7 @@ def test_load_fiff_from_raw():
 
     # load events
     ds = load.fiff.events(raw_path)
-    eq_(ds['i_start'].x.dtype.kind, 'i')
+    assert ds['i_start'].x.dtype.kind == 'i'
 
     # test separate events
     ds_evt = load.fiff.events(events=evt_path)
@@ -88,7 +84,7 @@ def test_load_fiff_from_raw():
         ds_ndvar = load.fiff.add_epochs(ds, -0.1, 0.3, decim=10, data='mag',
                                         proj=False, reject=2e-12)
     meg = ds_ndvar['meg']
-    eq_(meg.ndim, 3)
+    assert meg.ndim == 3
     data = meg.get_data(('case', 'sensor', 'time'))
 
     # compare with mne epochs

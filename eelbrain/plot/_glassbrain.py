@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Author: Proloy Das <proloy@umd.edu>
 """2d projections of an ROI/mask image visualization via nilearn.plotting.glassbrain
 
@@ -155,9 +154,10 @@ class GlassBrain(TimeSlicerEF, ColorBarMixin, EelFigure):
 
     Notes
     -----
-    The brain overlay assumes coordinates in MNI152 space
-    (see `The MNI brain and the Talairach atlas
-    <http://imaging.mrc-cbu.cam.ac.uk/imaging/MniTalairach>`_)
+    The brain overlay assumes coordinates in MNI152 space (see `The MNI brain
+    and the Talairach atlas <http://imaging.mrc-cbu.cam.ac.uk/imaging/MniTalairach>`_).
+    For data with different coordinates, the brain shape overlay will not be
+    accurate.
     """
     _make_axes = False
     _display_time_in_frame_title = True

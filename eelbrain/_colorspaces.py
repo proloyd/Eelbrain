@@ -15,13 +15,6 @@ from matplotlib.cm import register_cmap
 from matplotlib.colors import LinearSegmentedColormap, Normalize
 import numpy as np
 
-try:
-    from matplotlib.colors import to_rgb, to_rgba
-except ImportError:  # matplotlib < 2
-    from matplotlib.colors import colorConverter
-    to_rgb = colorConverter.to_rgb
-    to_rgba = colorConverter.to_rgba
-
 
 def lch_to_rgb(lightness, chroma, hue):
     "Convert Lightness/Chroma/Hue color representation to RGB"

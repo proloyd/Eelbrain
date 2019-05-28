@@ -9,12 +9,11 @@ from tempfile import mkdtemp
 from time import time, sleep
 from warnings import warn
 
-from matplotlib.colors import ListedColormap
+from matplotlib.colors import ListedColormap, to_rgb, to_rgba
 from matplotlib.image import imsave
 from mne.io.constants import FIFF
 import numpy as np
 
-from .._colorspaces import to_rgb, to_rgba
 from .._data_obj import NDVar, SourceSpace, asndvar
 from .._text import ms
 from .._utils import LazyProperty

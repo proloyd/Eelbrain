@@ -12,7 +12,6 @@ import tempfile
 import warnings
 
 import mne
-from nose.tools import eq_, assert_almost_equal,  nottest
 import numpy as np
 from numpy.testing import (
     assert_equal, assert_array_equal, assert_allclose,
@@ -56,20 +55,20 @@ def test_aggregate():
     dsa = ds.aggregate('A%B', drop=drop)
     assert_array_equal(dsa['n'], [15, 15, 15, 15])
     idx1 = ds.eval("logical_and(A=='a0', B=='b0')")
-    eq_(dsa['Y', 0], ds['Y', idx1].mean())
+    assert dsa['Y', 0] == ds['Y', idx1].mean()
 
     # unequal cell counts
     ds = ds[:-3]
     dsa = ds.aggregate('A%B', drop=drop)
     assert_array_equal(dsa['n'], [15, 15, 15, 12])
     idx1 = ds.eval("logical_and(A=='a0', B=='b0')")
-    eq_(dsa['Y', 0], ds['Y', idx1].mean())
+    assert dsa['Y', 0] == ds['Y', idx1].mean()
 
     # equalize count
     dsa = ds.aggregate('A%B', drop=drop, equal_count=True)
     assert_array_equal(dsa['n'], [12, 12, 12, 12])
     idx1_12 = np.logical_and(idx1, idx1.cumsum() <= 12)
-    eq_(dsa['Y', 0], ds['Y', idx1_12].mean())
+    assert dsa['Y', 0] == ds['Y', idx1_12].mean()
 
     # equalize count with empty cell
     sds = ds.sub("logical_or(A == 'a1', B == 'b1')")
@@ -171,7 +170,7 @@ def test_celltable():
     assert_array_equal(ct.data['True'], ds['Y', X])
 
     ct = Celltable('Y', X, cat=('True', 'False'), ds=ds)
-    eq_(('True', 'False'), ct.cat)
+    assert ('True', 'False') == ct.cat
     assert_array_equal(ct.data['True'], ds['Y', X])
 
     # test coercion of Y
@@ -302,7 +301,7 @@ def test_datalist():
     dl = Datalist(range(10))
 
     # indexing
-    eq_(dl[3], 3)
+    assert dl[3] == 3
     x = dl[:3]
     assert isinstance(x, Datalist)
     assert_array_equal(x, list(range(3)))
@@ -324,10 +323,10 @@ def test_datalist():
 
     # repr
     dl = Datalist([['a', 'b'], [], ['a']])
-    eq_(str(dl), "[['a', 'b'], [], ['a']]")
+    assert str(dl) == "[['a', 'b'], [], ['a']]"
     dl = Datalist([['a', 'b'], [], ['a']], fmt='strlist')
-    eq_(str(dl), '[[a, b], [], [a]]')
-    eq_(str(dl[:2]), '[[a, b], []]')
+    assert str(dl) == '[[a, b], [], [a]]'
+    assert str(dl[:2]) == '[[a, b], []]'
 
     # eq
     a = Datalist([[], [1], [], [1]])
@@ -411,8 +410,8 @@ def test_dataset_indexing():
     ds.index('case')
 
     # indexing values
-    eq_(ds['A', 1], ds['A'][1])
-    eq_(ds[1, 'A'], ds['A'][1])
+    assert ds['A', 1] == ds['A'][1]
+    assert ds[1, 'A'] == ds['A'][1]
 
     # indexing variables
     assert_dataobj_equal(ds[:, 'A'], ds['A'])
@@ -430,11 +429,14 @@ def test_dataset_indexing():
     assert_dataset_equal(ds[('A', 'B'), :10], ds2[:10])
     assert_dataset_equal(ds[:10, ('A', 'B')], ds2[:10])
 
+    # empty index
+    assert_dataobj_equal(ds2[[]], Dataset([Factor([], 'A'), Factor([], 'B')]))
+
     # assigning value
     ds[2, 'A'] = 'hello'
-    eq_(ds[2, 'A'], 'hello')
+    assert ds[2, 'A'] == 'hello'
     ds['A', 2] = 'not_hello'
-    eq_(ds[2, 'A'], 'not_hello')
+    assert ds[2, 'A'] == 'not_hello'
 
     # assigning new factor
     ds['C', :] = 'c'
@@ -489,6 +491,18 @@ YCat   Factor   c1:17, c2:24, c3:19
 uts    NDVar    100 time; -2.67343 - 4.56283     
 -------------------------------------------------
 Dataset: 60 cases"""
+    assert str(ds[:5].summary()) == """Key    Type     Values                                     
+-----------------------------------------------------------
+A      Factor   a0:5                                       
+B      Factor   b0:5                                       
+rm     Factor   R00, R01, R02, R03, R04                    
+ind    Factor   R00, R01, R02, R03, R04                    
+Y      Var      0.77358, 1.01346, 1.89424, 2.09773, 2.55396
+YBin   Factor   c1:4, c2                                   
+YCat   Factor   c1:2, c2:2, c3                             
+uts    NDVar    100 time; -0.634835 - 4.56283              
+-----------------------------------------------------------
+Dataset: 5 cases"""
 
 
 def test_dataset_sorting():
@@ -520,30 +534,30 @@ def test_dim_categorial():
 
     # basic properties
     print(dim)
-    eq_(len(dim), len(values))
+    assert len(dim) == len(values)
 
     # persistence
     s = pickle.dumps(dim, pickle.HIGHEST_PROTOCOL)
     dim_ = pickle.loads(s)
-    eq_(dim_, dim)
+    assert dim_ == dim
 
     # indexing
     sub_values = values[:2]
     idx = dim._array_index(sub_values)
-    eq_(dim[idx], Categorial(name, sub_values))
-    eq_(dim._array_index('a'), values.index('a'))
-    eq_(dim._array_index('abc'), values.index('abc'))
+    assert dim[idx] == Categorial(name, sub_values)
+    assert dim._array_index('a') == values.index('a')
+    assert dim._array_index('abc') == values.index('abc')
     with pytest.raises(TypeError):
         dim._array_index(('a', 'b', 'c'))
 
     # intersection
     dim2 = Categorial(name, ['c', 'b', 'e'])
     dim_i = dim.intersect(dim2)
-    eq_(dim_i, Categorial(name, ['b', 'c']))
+    assert dim_i == Categorial(name, ['b', 'c'])
 
     # unicode
     dimu = Categorial(name, ['c', 'b', 'e'])
-    eq_(dimu, dim2)
+    assert dimu == dim2
 
 
 def test_dim_scalar():
@@ -585,16 +599,16 @@ def test_dim_uts():
     # make sure indexing rounds correctly for floats
     for i, s in enumerate(np.arange(0, 1.4, 0.05)):
         idx = uts._array_index((-0.1 + s, s))
-        eq_(idx.start, 10 * i)
-        eq_(idx.stop, 20 + 10 * i)
+        assert idx.start == 10 * i
+        assert idx.stop == 20 + 10 * i
 
     # intersection
     uts1 = UTS(-0.1, 0.01, 50)
     uts2 = UTS(0, 0.01, 20)
     intersection = uts1.intersect(uts2)
-    eq_(intersection, uts2)
+    assert intersection == uts2
     idx = uts1._array_index((0, 0.2))
-    eq_(uts1[idx], uts2)
+    assert uts1[idx] == uts2
 
 
 def test_effect():
@@ -785,13 +799,13 @@ def test_longname():
     v = Var([1], 'v')
 
     # simple operations, also tested in test_var()
-    eq_(longname(v.abs()), 'abs(v)')
-    eq_(longname(u * v), "u * v")
-    eq_(longname(u * v.abs()), "u * abs(v)")
+    assert longname(v.abs()) == 'abs(v)'
+    assert longname(u * v) == "u * v"
+    assert longname(u * v.abs()) == "u * abs(v)"
 
     # Dataset assigning
     ds['abs_v'] = v.abs()
-    eq_(longname(ds['abs_v']), 'abs_v')
+    assert longname(ds['abs_v']) == 'abs(v)'
 
 
 def test_model():
@@ -804,7 +818,7 @@ def test_model():
 
     # model repr
     m = a * b + v
-    eq_(repr(m), "a + b + a % b + v")
+    assert repr(m) == "a + b + a % b + v"
     lines = ("intercept   a   b   a x b   v",
              "-----------------------------",
              "1           1   1   1       1",
@@ -813,16 +827,16 @@ def test_model():
              "1           0   0   0       4",
              "1           0   1   0       5",
              "1           0   0   0       6")
-    eq_(str(m), '\n'.join(lines))
-    eq_(str(m.head(2)), '\n'.join(lines[:4]))
-    eq_(str(m.tail(2)), '\n'.join(lines[:2] + lines[-2:]))
+    assert str(m) == '\n'.join(lines)
+    assert str(m.head(2)) == '\n'.join(lines[:4])
+    assert str(m.tail(2)) == '\n'.join(lines[:2] + lines[-2:])
     str(m.info())
 
     # model without explicit names
     x1 = Factor('ab', repeat=2)
     x2 = Factor('ab', tile=2)
     m = x1 * x2
-    eq_(repr(m), "<?> + <?> + <?> % <?>")
+    assert repr(m) == "<?> + <?> + <?> % <?>"
 
     # catch explicit intercept
     intercept = Factor('i', repeat=4, name='intercept')
@@ -830,14 +844,14 @@ def test_model():
         _ = a * intercept
 
     # different var/factor combinations
-    eq_(a * b, a + b + a % b)
-    eq_(a * v, a + v + a % v)
-    eq_(a * (v + w), a + v + w + a % v + a % w)
+    assert a * b == a + b + a % b
+    assert a * v == a + v + a % v
+    assert a * (v + w) == a + v + w + a % v + a % w
 
     # parametrization
     m = v + w + v * w
     p = m._parametrize('dummy')
-    eq_(p.column_names, ['intercept', 'v', 'w', 'v * w'])
+    assert p.column_names == ['intercept', 'v', 'w', 'v * w']
     assert_array_equal(p.x[:, p.terms['intercept']], 1)
     assert_array_equal(p.x[:, p.terms['v']], v.x[:, None])
     assert_array_equal(p.x[:, p.terms['w']], w.x[:, None])
@@ -891,7 +905,7 @@ def test_ndvar():
 
     # slicing with different index kinds
     tgt = x.x[s_case, 2:4, 30:40]
-    eq_(tgt.shape, (3, 2, 10))
+    assert tgt.shape == (3, 2, 10)
     # single
     assert_equal(x.sub(case=s_case, sensor=s_sensor, time=s_time), tgt)
     assert_equal(x.sub(case=a_case, sensor=a_sensor, time=a_time), tgt)
@@ -938,7 +952,7 @@ def test_ndvar():
     # univariate result
     assert_dataobj_equal(x.sub(sensor='2', time=0.1),
                          Var(x.x[:, 2, 30], x.name))
-    eq_(x.sub(case=0, sensor='2', time=0.1), x.x[0, 2, 30])
+    assert x.sub(case=0, sensor='2', time=0.1) == x.x[0, 2, 30]
 
     # baseline correction
     x_bl = x - x.summary(time=(None, 0))
@@ -966,7 +980,7 @@ def test_ndvar_binning():
     assert_array_equal(b.x, x_dst, "Binned data")
     assert_array_equal(b.time, time_dst, "Bin times")
     b = ndvar.sub(time=(0, 0.8)).bin(0.4)
-    eq_(b.shape, (2,))
+    assert b.shape == (2,)
 
     # 2-d
     ndvar = NDVar(np.vstack((x, x, x)), ('case', time))
@@ -979,13 +993,13 @@ def test_ndvar_binning():
     ndvar = NDVar(x, ('case', UTS(0.45000000000000007, 0.005, 70)))
     binned_ndvar = ndvar.bin(0.05)
     assert_array_equal(binned_ndvar.x, 1.)
-    eq_(binned_ndvar.shape, (5, 7))
+    assert binned_ndvar.shape == (5, 7)
 
     # n_bins
     x = np.ones((2, 601))
     ndvar = NDVar(x, ('case', UTS(-0.1, 0.001, 601)))
     binned_ndvar = ndvar.bin(0.1, 0.1, 0.4)
-    eq_(binned_ndvar.shape, (2, 3))
+    assert binned_ndvar.shape == (2, 3)
 
 
 def test_ndvar_connectivity():
@@ -1009,30 +1023,29 @@ def test_ndvar_connectivity():
 
     # custom connectivity on first axis
     l = x.label_clusters(3)
-    eq_(len(l.info['cids']), 5)
+    assert len(l.info['cids']) == 5
     assert_array_equal(np.unique(l.x), np.append([0], l.info['cids']))
 
     # custom connectivity second
     sensor, time = x.dims
     x = NDVar(x.x.T, (time, sensor))
     l = x.label_clusters(3)
-    eq_(len(l.info['cids']), 5)
+    assert len(l.info['cids']) == 5
 
     # disconnected
     cat = Categorial('categorial', ('a', 'b', 'c', 'd', 'e'))
     x = NDVar(x.x, (time, cat))
     l = x.label_clusters(3)
-    eq_(len(l.info['cids']), 13)
+    assert len(l.info['cids']) == 13
 
     # ordered
     scalar = Scalar('ordered', range(5))
     x = NDVar(x.x, (time, scalar))
     l = x.label_clusters(3)
-    eq_(len(l.info['cids']), 6)
+    assert len(l.info['cids']) == 6
 
 
-@nottest
-def test_ndvar_index(x, dimname, index, a_index, index_repr=True):
+def ndvar_index(x, dimname, index, a_index, index_repr=True):
     "Helper function for test_ndvar_indexing"
     ax = x.get_axis(dimname)
     index_prefix = FULL_AXIS_SLICE * ax
@@ -1042,7 +1055,7 @@ def test_ndvar_index(x, dimname, index, a_index, index_repr=True):
         if index_repr is not False:
             if index_repr is True:
                 index_repr = index
-            eq_(dim._dim_index(a_index), index_repr)
+            assert dim._dim_index(a_index) == index_repr
     x_array = x.x[index_prefix + (a_index,)]
     x1 = x.sub(**{dimname: index})
     x2 = x[index_prefix + (index,)]
@@ -1055,30 +1068,30 @@ def test_ndvar_indexing():
     x = ds['utsnd']
 
     # case
-    test_ndvar_index(x, 'case', 1, 1)
-    test_ndvar_index(x, 'case', [0, 3], [0, 3])
-    test_ndvar_index(x, 'case', slice(0, 10, 2), slice(0, 10, 2))
+    ndvar_index(x, 'case', 1, 1)
+    ndvar_index(x, 'case', [0, 3], [0, 3])
+    ndvar_index(x, 'case', slice(0, 10, 2), slice(0, 10, 2))
 
     # Sensor
-    test_ndvar_index(x, 'sensor', '0', 0)
-    test_ndvar_index(x, 'sensor', ['0', '2'], [0, 2])
-    test_ndvar_index(x, 'sensor', slice('0', '2'), slice(0, 2))
-    test_ndvar_index(x, 'sensor', 0, 0, False)
-    test_ndvar_index(x, 'sensor', [0, 2], [0, 2], False)
-    test_ndvar_index(x, 'sensor', slice(0, 2), slice(0, 2), False)
+    ndvar_index(x, 'sensor', '0', 0)
+    ndvar_index(x, 'sensor', ['0', '2'], [0, 2])
+    ndvar_index(x, 'sensor', slice('0', '2'), slice(0, 2))
+    ndvar_index(x, 'sensor', 0, 0, False)
+    ndvar_index(x, 'sensor', [0, 2], [0, 2], False)
+    ndvar_index(x, 'sensor', slice(0, 2), slice(0, 2), False)
 
     # UTS
-    test_ndvar_index(x, 'time', 0, 20)
-    test_ndvar_index(x, 'time', 0.1, 30)
-    test_ndvar_index(x, 'time', 0.102, 30, False)
-    test_ndvar_index(x, 'time', [0, 0.1, 0.2], [20, 30, 40])
-    test_ndvar_index(x, 'time', slice(0.1, None), slice(30, None))
-    test_ndvar_index(x, 'time', slice(0.2), slice(40))
-    test_ndvar_index(x, 'time', slice(0.202), slice(41), False)
-    test_ndvar_index(x, 'time', slice(0.1, 0.2), slice(30, 40))
-    test_ndvar_index(x, 'time', slice(0.102, 0.2), slice(31, 40), False)
-    test_ndvar_index(x, 'time', slice(0.1, None, 0.1), slice(30, None, 10))
-    test_ndvar_index(x, 'time', slice(0.1, None, 1), slice(30, None, 100))
+    ndvar_index(x, 'time', 0, 20)
+    ndvar_index(x, 'time', 0.1, 30)
+    ndvar_index(x, 'time', 0.102, 30, False)
+    ndvar_index(x, 'time', [0, 0.1, 0.2], [20, 30, 40])
+    ndvar_index(x, 'time', slice(0.1, None), slice(30, None))
+    ndvar_index(x, 'time', slice(0.2), slice(40))
+    ndvar_index(x, 'time', slice(0.202), slice(41), False)
+    ndvar_index(x, 'time', slice(0.1, 0.2), slice(30, 40))
+    ndvar_index(x, 'time', slice(0.102, 0.2), slice(31, 40), False)
+    ndvar_index(x, 'time', slice(0.1, None, 0.1), slice(30, None, 10))
+    ndvar_index(x, 'time', slice(0.1, None, 1), slice(30, None, 100))
 
     # NDVar as index
     sens_mean = x.mean(('case', 'time'))
@@ -1113,13 +1126,13 @@ def test_ndvar_indexing():
         _ = x[:, 9]
     with pytest.raises(IndexError):
         _ = x[:, 6]
-    test_ndvar_index(x, 'frequency', 10, 1)
-    test_ndvar_index(x, 'frequency', 10.1, 1, False)
-    test_ndvar_index(x, 'frequency', 9.9, 1, False)
-    test_ndvar_index(x, 'frequency', [8.1, 10.1], [0, 1], False)
-    test_ndvar_index(x, 'frequency', slice(8, 13), slice(0, 2))
-    test_ndvar_index(x, 'frequency', slice(8, 13.1), slice(0, 3), False)
-    test_ndvar_index(x, 'frequency', slice(8, 13.1, 2), slice(0, 3, 2), False)
+    ndvar_index(x, 'frequency', 10, 1)
+    ndvar_index(x, 'frequency', 10.1, 1, False)
+    ndvar_index(x, 'frequency', 9.9, 1, False)
+    ndvar_index(x, 'frequency', [8.1, 10.1], [0, 1], False)
+    ndvar_index(x, 'frequency', slice(8, 13), slice(0, 2))
+    ndvar_index(x, 'frequency', slice(8, 13.1), slice(0, 3), False)
+    ndvar_index(x, 'frequency', slice(8, 13.1, 2), slice(0, 3, 2), False)
 
     # Categorial
     x = NDVar(x.x, ('case', Categorial('cat', ['8', '10', '13', '17']), x.time))
@@ -1127,10 +1140,10 @@ def test_ndvar_indexing():
         _ = x[:, 9]
     with pytest.raises(IndexError):
         _ = x[:, '9']
-    test_ndvar_index(x, 'cat', '13', 2)
-    test_ndvar_index(x, 'cat', ['8', '13'], [0, 2])
-    test_ndvar_index(x, 'cat', slice('8', '13'), slice(0, 2))
-    test_ndvar_index(x, 'cat', slice('8', None, 2), slice(0, None, 2))
+    ndvar_index(x, 'cat', '13', 2)
+    ndvar_index(x, 'cat', ['8', '13'], [0, 2])
+    ndvar_index(x, 'cat', slice('8', '13'), slice(0, 2))
+    ndvar_index(x, 'cat', slice('8', None, 2), slice(0, None, 2))
 
     # SourceSpace
     x = datasets.get_mne_stc(True, subject='fsaverage')
@@ -1140,19 +1153,19 @@ def test_ndvar_indexing():
         _ = x['insula-lh':'insula-rh']
     with pytest.raises(TypeError):
         _ = x['insula-lh', 'insula-rh']
-    test_ndvar_index(x, 'source', 'L90', 90)
-    test_ndvar_index(x, 'source', 'R90', 642 + 90)
-    test_ndvar_index(x, 'source', ['L90', 'R90'], [90, 642 + 90])
-    test_ndvar_index(x, 'source', slice('L90', 'R90'), slice(90, 642 + 90))
-    test_ndvar_index(x, 'source', 90, 90, False)
-    test_ndvar_index(x, 'source', [90, 95], [90, 95], False)
-    test_ndvar_index(x, 'source', slice(90, 95), slice(90, 95), False)
-    test_ndvar_index(x, 'source', 'insula-lh', x.source.parc == 'insula-lh', False)
-    test_ndvar_index(x, 'source', ('insula-lh', 'insula-rh'),
-                     x.source.parc.isin(('insula-lh', 'insula-rh')), False)
+    ndvar_index(x, 'source', 'L90', 90)
+    ndvar_index(x, 'source', 'R90', 642 + 90)
+    ndvar_index(x, 'source', ['L90', 'R90'], [90, 642 + 90])
+    ndvar_index(x, 'source', slice('L90', 'R90'), slice(90, 642 + 90))
+    ndvar_index(x, 'source', 90, 90, False)
+    ndvar_index(x, 'source', [90, 95], [90, 95], False)
+    ndvar_index(x, 'source', slice(90, 95), slice(90, 95), False)
+    ndvar_index(x, 'source', 'insula-lh', x.source.parc == 'insula-lh', False)
+    ndvar_index(x, 'source', ('insula-lh', 'insula-rh'),
+                x.source.parc.isin(('insula-lh', 'insula-rh')), False)
     n_lh = x.source.parc.endswith('lh').sum()
-    test_ndvar_index(x, 'source', 'lh', slice(n_lh), False)
-    test_ndvar_index(x, 'source', 'rh', slice(n_lh, None), False)
+    ndvar_index(x, 'source', 'lh', slice(n_lh), False)
+    ndvar_index(x, 'source', 'rh', slice(n_lh, None), False)
 
     # index dim != dim
     source_rh = x.source[x.source.lh_n:]
@@ -1219,12 +1232,12 @@ def test_ndvar_summary_methods():
     idx1d = x.mean(('case', 'time')) > 0
 
     # info inheritance
-    eq_(x.mean(('sensor', 'time')).info, x.info)
+    assert x.mean(('sensor', 'time')).info == x.info
     # info update for booleans
-    eq_(x.any(('sensor', 'time')).info, {'test_item': 1})
+    assert x.any(('sensor', 'time')).info == {'test_item': 1}
 
     # numpy functions
-    eq_(x.any(), x.x.any())
+    assert x.any() == x.x.any()
     assert_array_equal(x.any(dim), x.x.any(axis))
     assert_array_equal(x.any(dims), x.x.any(axes))
     assert_array_equal(x.any(idx0), [x_[idx0.x].any() for x_ in x.x])
@@ -1233,58 +1246,58 @@ def test_ndvar_summary_methods():
     assert_array_equal(x.any(idxsub), xsub.any(idxsub))
     assert_array_equal(x.any(idx1d), x.x[:, idx1d.x].any(1))
 
-    eq_(x.max(), x.x.max())
+    assert x.max() == x.x.max()
     assert_array_equal(x.max(dim), x.x.max(axis))
     assert_array_equal(x.max(dims), x.x.max(axes))
     assert_array_equal(x.max(idx0), [x_[idx0.x].max() for x_ in x.x])
-    assert_array_equal(x.max(idx), [x_[i].max() for x_, i in zip(x.x, idx.x)])
+    assert_array_equal(x.max(idx), x.x[idx.x].max())
     assert_array_equal(x0.max(idx0), x0.x[idx0.x].max())
     assert_array_equal(x.max(idxsub), xsub.max(idxsub))
     assert_array_equal(x.max(idx1d), x.x[:, idx1d.x].max(1))
 
-    eq_(x.mean(), x.x.mean())
+    assert x.mean() == x.x.mean()
     assert_array_equal(x.mean(dim), x.x.mean(axis))
     assert_array_equal(x.mean(dims), x.x.mean(axes))
-    assert_array_equal(x.mean(idx0), [x_[idx0.x].mean() for x_ in x.x])
-    assert_array_equal(x.mean(idx), [x_[i].mean() for x_, i in zip(x.x, idx.x)])
+    assert_array_almost_equal(x.mean(idx0), [x_[idx0.x].mean() for x_ in x.x])
+    assert_array_equal(x.mean(idx), x.x[idx.x].mean())
     assert_array_equal(x0.mean(idx0), x0.x[idx0.x].mean())
     assert_array_equal(x.mean(idxsub), xsub.mean(idxsub))
     assert_array_equal(x.mean(idx1d), x.x[:, idx1d.x].mean(1))
 
-    eq_(x.min(), x.x.min())
+    assert x.min() == x.x.min()
     assert_array_equal(x.min(dim), x.x.min(axis))
     assert_array_equal(x.min(dims), x.x.min(axes))
     assert_array_equal(x.min(idx0), [x_[idx0.x].min() for x_ in x.x])
-    assert_array_equal(x.min(idx), [x_[i].min() for x_, i in zip(x.x, idx.x)])
+    assert_array_equal(x.min(idx), x.x[idx.x].min())
     assert_array_equal(x0.min(idx0), x0.x[idx0.x].min())
     assert_array_equal(x.min(idxsub), xsub.min(idxsub))
     assert_array_equal(x.min(idx1d), x.x[:, idx1d.x].min(1))
 
-    eq_(x.var(), x.x.var())
-    eq_(x.var(ddof=1), x.x.var(ddof=1))
+    assert x.var() == x.x.var()
+    assert x.var(ddof=1) == x.x.var(ddof=1)
     assert_array_equal(x.var(dim), x.x.var(axis))
     assert_array_equal(x.var(dims, ddof=1), x.x.var(axes, ddof=1))
-    assert_array_equal(x.var(idx0), [x_[idx0.x].var() for x_ in x.x])
-    assert_array_equal(x.var(idx), [x_[i].var() for x_, i in zip(x.x, idx.x)])
+    assert_array_almost_equal(x.var(idx0), [x_[idx0.x].var() for x_ in x.x])
+    assert_array_equal(x.var(idx), x.x[idx.x].var())
     assert_array_equal(x0.var(idx0), x0.x[idx0.x].var())
     assert_array_equal(x.var(idxsub), xsub.var(idxsub))
     assert_array_equal(x.var(idx1d), x.x[:, idx1d.x].var(1))
 
-    eq_(x.std(), x.x.std())
+    assert x.std() == x.x.std()
     assert_array_equal(x.std(dim), x.x.std(axis))
     assert_array_equal(x.std(dims), x.x.std(axes))
-    assert_array_equal(x.std(idx0), [x_[idx0.x].std() for x_ in x.x])
-    assert_array_equal(x.std(idx), [x_[i].std() for x_, i in zip(x.x, idx.x)])
+    assert_array_almost_equal(x.std(idx0), [x_[idx0.x].std() for x_ in x.x])
+    assert_array_equal(x.std(idx), x.x[idx.x].std())
     assert_array_equal(x0.std(idx0), x0.x[idx0.x].std())
     assert_array_equal(x.std(idxsub), xsub.std(idxsub))
     assert_array_equal(x.std(idx1d), x.x[:, idx1d.x].std(1))
 
     # non-numpy
-    eq_(x.rms(), rms(x.x))
+    assert x.rms() == rms(x.x)
     assert_array_equal(x.rms(dim), rms(x.x, axis))
     assert_array_equal(x.rms(dims), rms(x.x, axes))
-    assert_array_equal(x.rms(idx0), [rms(x_[idx0.x]) for x_ in x.x])
-    assert_array_equal(x.rms(idx), [rms(x_[i]) for x_, i in zip(x.x, idx.x)])
+    assert_array_almost_equal(x.rms(idx0), [rms(x_[idx0.x]) for x_ in x.x])
+    assert_array_equal(x.rms(idx), rms(x.x[idx.x]))
     assert_array_equal(x0.rms(idx0), rms(x0.x[idx0.x]))
     assert_array_equal(x.rms(idxsub), xsub.rms(idxsub))
     assert_array_equal(x.rms(idx1d), rms(x.x[:, idx1d.x], 1))
@@ -1306,10 +1319,15 @@ def test_ndvar_timeseries_methods():
     assert_array_equal(env.x, envs.x.swapaxes(1,2))
 
     # indexing
-    eq_(len(ds[0, 'uts'][0.01:0.1].time), 9)
+    assert len(ds[0, 'uts'][0.01:0.1].time) == 9
 
     # smoothing
     ma = x.smooth('time', 0.2, 'blackman')
+    assert_dataobj_equal(x.smooth('time', window='blackman', window_samples=20), ma)
+    with pytest.raises(TypeError):
+        x.smooth('time')
+    with pytest.raises(TypeError):
+        x.smooth('time', 0.2, 'blackman', window_samples=20)
     mas = xs.smooth('time', 0.2, 'blackman')
     assert_allclose(ma.x, mas.x.swapaxes(1, 2), 1e-10)
     ma_mean = x.mean('case').smooth('time', 0.2, 'blackman')
@@ -1336,9 +1354,9 @@ def test_ndvar_timeseries_methods():
     assert_array_almost_equal(f.x, (f.frequency.values == 2) * (len(f) - 1))
 
     # update tmin
-    eq_(x.time.times[0], -0.2)
+    assert x.time.times[0] == -0.2
     x = set_tmin(x, 3.2)
-    eq_(x.time.times[0], 3.2)
+    assert x.time.times[0] == 3.2
 
 
 def test_nested_effects():
@@ -1346,18 +1364,18 @@ def test_nested_effects():
     ds = datasets.get_uv(nrm=True)
 
     nested = ds.eval("nrm(B)")
-    eq_(nested.cells, ds['nrm'].cells)
+    assert nested.cells == ds['nrm'].cells
 
     # interaction
     i = ds.eval("A % nrm(B)")
     expected_cells = tuple((case['A'], case['nrm']) for case in ds.itercases())
-    eq_(i.cells, expected_cells)
+    assert i.cells == expected_cells
 
     assert_has_no_empty_cells(ds.eval('A * B + nrm(B) + A % nrm(B)'))
 
     i = ds.eval("nrm(B) % A")
     expected_cells = sorted((case['nrm'], case['A']) for case in ds.itercases())
-    eq_(i.cells, tuple(expected_cells))
+    assert i.cells == tuple(expected_cells)
 
 
 @skip_on_windows  # uses R
@@ -1395,11 +1413,11 @@ def test_ols():
         # 1 predictor
         r('lm1 <- lm(y ~ x, ds)')
         beta = r('coef(lm1)')[1]
-        assert_almost_equal(b1.x[0, i], beta)
+        assert b1.x[0, i] == pytest.approx(beta)
         res = r('residuals(lm1)')
         assert_array_almost_equal(res1.x[:, i], res)
         t = r('coef(summary(lm1))')[5]
-        assert_almost_equal(t1.x[0, i], t)
+        assert t1.x[0, i] == pytest.approx(t)
         # 2 predictors
         r('lm2 <- lm(y ~ x + x2, ds)')
         beta = r('coef(lm2)')[1:]
@@ -1422,11 +1440,11 @@ def test_ols():
         # 1 predictor
         r('lm1 <- lm(y ~ x, ds)')
         beta = r('coef(lm1)')[1]
-        assert_almost_equal(b1.x[0, 1, i], beta)
+        assert b1.x[0, 1, i] == pytest.approx(beta)
         res = r('residuals(lm1)')
         assert_array_almost_equal(res1.x[:, 1, i], res)
         t = r('coef(summary(lm1))')[5]
-        assert_almost_equal(t1.x[0, 1, i], t)
+        assert t1.x[0, 1, i] == pytest.approx(t)
 
 
 def test_io_pickle():
@@ -1473,7 +1491,7 @@ def test_r():
 
     r("data(sleep)")
     ds = Dataset.from_r("sleep")
-    eq_(ds.name, 'sleep')
+    assert ds.name == 'sleep'
     extra = (0.7, -1.6, -0.2, -1.2, -0.1, 3.4, 3.7, 0.8, 0.0, 2.0, 1.9, 0.8,
              1.1, 0.1, -0.1, 4.4, 5.5, 1.6, 4.6, 3.4)
     assert_array_equal(ds.eval('extra'), extra)
@@ -1495,20 +1513,21 @@ def test_sensor():
     sensor = Sensor(locs, names, 'test')
     s1 = sensor[[0, 1]]
     s2 = sensor[[1, 2]]
-    eq_(tuple(s1.names), ('1', '2'))
-    eq_(tuple(s2.names), ('2', '3'))
-    eq_(s1, sensor[[0, 1]])
+    assert tuple(s1.names) == ('1', '2')
+    assert tuple(s2.names) == ('2', '3')
+    assert s1 == sensor[[0, 1]]
     assert s1 != s2
-    eq_(s1.intersect(s2), sensor[[1]])
-    eq_(sensor._dim_index(np.array([0, 1, 1], bool)), ['2', '3'])
+    assert s1.intersect(s2) == sensor[[1]]
+    assert sensor._dim_index(np.array([0, 1, 1], bool)) == ['2', '3']
 
 
 def test_shuffle():
     x = Factor('aabbaa')
     for _ in range(3):
         i = shuffled_index(6, x)
-        eq_(sorted(i[2:4]), [2, 3])
-        eq_(sorted(i), list(range(6)))
+        assert sorted(i[2:4]) == [2, 3]
+        assert sorted(i) == list(range(6))
+
 
 @requires_mne_sample_data
 def test_source_space():
@@ -1527,16 +1546,15 @@ def test_source_space():
     src = datasets._mne_source_space(subject, 'ico-5', mri_sdir)
     source = SourceSpace.from_mne_source_spaces(src, 'ico-5', mri_sdir)
     source_v1 = source[source._array_index(label_v1)]
-    eq_(source_v1, SourceSpace.from_mne_source_spaces(src, 'ico-5', mri_sdir,
-                                                      label=label_v1))
+    assert source_v1 == SourceSpace.from_mne_source_spaces(src, 'ico-5', mri_sdir, label=label_v1)
     source_ba1_v1 = source[source._array_index(label_ba1_v1)]
     source_v1_mt = source[source._array_index(label_v1_mt)]
     source_v1_intersection = source_ba1_v1.intersect(source_v1_mt)
     assert_source_space_equal(source_v1, source_v1_intersection)
 
     # persistence
-    eq_(pickle.loads(pickle.dumps(source, pickle.HIGHEST_PROTOCOL)), source)
-    eq_(pickle.loads(pickle.dumps(source_v1, pickle.HIGHEST_PROTOCOL)), source_v1)
+    assert pickle.loads(pickle.dumps(source, pickle.HIGHEST_PROTOCOL)) == source
+    assert pickle.loads(pickle.dumps(source_v1, pickle.HIGHEST_PROTOCOL)) == source_v1
 
     # index from label
     index = source.index_for_label(label_v1)
@@ -1550,7 +1568,7 @@ def test_source_space():
     x = np.vstack([index.x for index in indexes])
     ds = source._cluster_properties(x)
     for i in range(ds.n_cases):
-        eq_(ds[i, 'location'], parc[i].name)
+        assert ds[i, 'location'] == parc[i].name
 
     # multiple labels
     lingual_index = source._array_index('lingual-lh')
@@ -1562,9 +1580,9 @@ def test_source_space():
     with pytest.raises(IndexError):
         _ = lingual_source._array_index(cuneus_source)
     sub_source = source[source._array_index(('cuneus-lh', 'lingual-lh'))]
-    eq_(sub_source[sub_source._array_index('lingual-lh')], lingual_source)
-    eq_(sub_source[sub_source._array_index('cuneus-lh')], cuneus_source)
-    eq_(len(sub_source), len(lingual_source) + len(cuneus_source))
+    assert sub_source[sub_source._array_index('lingual-lh')] == lingual_source
+    assert sub_source[sub_source._array_index('cuneus-lh')] == cuneus_source
+    assert len(sub_source) == len(lingual_source) + len(cuneus_source)
 
     # indexing
     tgt = ['L%i' % i for i in chain(*sub_source.vertices)]
@@ -1573,8 +1591,8 @@ def test_source_space():
     # hemisphere indexing
     lh = source._array_index('lh')
     source_lh = source[lh]
-    eq_(source_lh._array_index('rh'), slice(0, 0))
-    eq_(source_lh._array_index('lh'), slice(len(source_lh)))
+    assert source_lh._array_index('rh') == slice(0, 0)
+    assert source_lh._array_index('lh') == slice(len(source_lh))
 
 
 def test_var():
@@ -1604,7 +1622,7 @@ def test_var():
     v = Var([1., 2., 3., -4.], 'v', info=info)
     c = 2
     v2 = Var([2., 2., 3., 3.], 'w', info=info)
-    eq_(v.info, info)
+    assert v.info == info
     for op, iop, desc in OPERATORS:
         target = op(v.x, c)
         vtarget = op(v.x, v2.x)
@@ -1614,11 +1632,11 @@ def test_var():
             w.x = iop(w.x, c)
         else:
             w = op(v, c)
-            eq_(w.info, {'a': 1, 'longname': 'v %s %s' % (desc, c)})
+            assert w.info == {'a': 1, 'longname': 'v %s %s' % (desc, c)}
             assert_array_equal(w, target)
             # with Var
             w = op(v, v2)
-            eq_(w.info, {'a': 1, 'longname': 'v %s w' % desc})
+            assert w.info == {'a': 1, 'longname': 'v %s w' % desc}
             assert_array_equal(w, vtarget)
         # i-op
         w = v.copy()
@@ -1631,17 +1649,17 @@ def test_var():
 
     # methods
     w = v.abs()
-    eq_(w.info, {'a': 1, 'longname': 'abs(v)'})
+    assert w.info == {'a': 1, 'longname': 'abs(v)'}
     assert_array_equal(w, np.abs(v.x))
     # log
     x = w.log()
-    eq_(x.info, {'a': 1, 'longname': 'log(abs(v))'})
+    assert x.info == {'a': 1, 'longname': 'log(abs(v))'}
     assert_array_equal(x, np.log(w.x))
     x = w.log(10)
-    eq_(x.info, {'a': 1, 'longname': 'log10(abs(v))'})
+    assert x.info == {'a': 1, 'longname': 'log10(abs(v))'}
     assert_array_equal(x, np.log10(w.x))
     x = w.log(42)
-    eq_(x.info, {'a': 1, 'longname': 'log42(abs(v))'})
+    assert x.info == {'a': 1, 'longname': 'log42(abs(v))'}
     assert_array_equal(x, np.log(w.x) / log(42))
 
     # assignment
@@ -1666,7 +1684,7 @@ def test_var():
     y = Var(np.arange(16))
     for i in range(1, 9):
         split = y.split(i)
-        eq_(len(split.cells), i)
+        assert len(split.cells) == i
 
     # .as_factor()
     v = Var(np.arange(4))

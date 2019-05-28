@@ -1,3 +1,4 @@
+include dsyevh3C/*
 include ez_setup.py
 include *.txt
 recursive-include . *.pyx

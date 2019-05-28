@@ -1,6 +1,6 @@
 # Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
 import wx
-import wx.html
+import wx.html  # wx.html2 causes ImportError on some Ubuntu installations
 
 from .frame import EelbrainFrame
 
@@ -23,8 +23,8 @@ class HTMLWindow(wx.html.HtmlWindow):
 
 class HTMLFrame(EelbrainFrame):
 
-    def __init__(self, parent, title, text, *args, **kwargs):
-        EelbrainFrame.__init__(self, parent, title=title, *args, **kwargs)
+    def __init__(self, parent, title, text, **kwargs):
+        EelbrainFrame.__init__(self, parent, title=title, **kwargs)
         self.text = HTMLWindow(self, wx.ID_ANY, style=wx.VSCROLL)
         self.text.SetPage(text)
         self.Show()

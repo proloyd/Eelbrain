@@ -3,6 +3,12 @@ Changes
 
 .. currentmodule:: eelbrain
 
+New in 0.31
+-----------
+
+* :mod:`testnd` API:  For permutation tests, the ``samples`` parameter now defaults to 10,000 (previously 0)
+
+
 New in 0.30
 -----------
 
@@ -10,25 +16,27 @@ New in 0.30
 
   - :class:`Space` dimension to represent physical space
   - :class:`VolumeSourceSpace` to represent volume source spaces
-  - Statistical tests: :class:`testnd.Vector`, :class:`testnd.VectorDifferenceRelated`,
-    :class:`testnd.VectorDifferenceIndependent`
+  - Statistical tests: :class:`testnd.Vector`, :class:`testnd.VectorDifferenceRelated`
   - Plotting with :class:`plot.GlassBrain`
 
+* ICA-GUI: tool to find high amplitude signals
+* Documentation: New :ref:`examples` section
 * :meth:`Dataset.summary` method
-* :class:`MneExperiment`:
+* .. currentmodule:: eelbrain.pipeline
+  :class:`MneExperiment` pipeline:
 
-  - :class:`RawApplyICA` preprocessing pipe to apply ICA estimated in a different pipe.
+  - :class:`RawApplyICA` preprocessing pipe to apply ICA estimated in a different branch of the pipeline.
   - :meth:`MneExperiment.load_evoked_stc` API more closely matches :meth:`MneExperiment.load_epochs_stc`
+  - :meth:`MneExperiment.load_neighbor_correlation`
+
 
 
 New in 0.29
 -----------
 
-* API changes:
+.. currentmodule:: eelbrain
 
-  - Better default parameters for :func:`resample`
-  - :meth:`MneExperiment.make_rej` renamed to :meth:`MneExperiment.make_epoch_selection`
-
+* API: Better default parameters for :func:`resample`
 * Predictor-specific stopping for :func:`boosting`
 * New :class:`NDVar` function :func:`correlation_coefficient`
 * Plotting:
@@ -36,14 +44,18 @@ New in 0.29
   - :ref:`general-layout-parameters` for plot size relative to screen size
   - Better plots for masked statistic maps
 
-* :class:`MneExperiment`:
+* .. currentmodule:: eelbrain.pipeline
+  :class:`MneExperiment` pipeline:
 
+  - API: :meth:`MneExperiment.make_rej` renamed to :meth:`MneExperiment.make_epoch_selection`
   - Object-based definitions (see :ref:`experiment-class-guide`)
   - New method :meth:`MneExperiment.plot_raw`
 
 
 New in 0.28
 -----------
+
+.. currentmodule:: eelbrain
 
 * Transition to `Python 3.6 <https://docs.python.org/3.6/>`_
 * API changes:
@@ -60,13 +72,16 @@ New in 0.28
     plots.
 
 * :class:`NDVar` and :class:`Var` support for ``round(x)``
-* :class:`MneExperiment`:
+* .. currentmodule:: eelbrain.pipeline
+  :class:`MneExperiment` pipeline:
 
   - Independent measures t-test
 
 
 New in 0.27
 -----------
+
+.. currentmodule:: eelbrain
 
 * API changes:
 
@@ -133,7 +148,8 @@ New in 0.26
   - :meth:`NDVar.log`
   - :meth:`NDVar.smooth`
 
-* :class:`MneExperiment`:
+* .. currentmodule:: eelbrain.pipeline
+  :class:`MneExperiment` pipeline:
 
   - :meth:`MneExperiment.reset` (replacing :meth:`MneExperiment.store_state`
     and :meth:`MneExperiment.restore_state`)
@@ -142,9 +158,10 @@ New in 0.26
   - :attr:`MneExperiment.screen_log_level`
 
 
-
 New in 0.25
 -----------
+
+.. currentmodule:: eelbrain
 
 * Installation with ``conda`` (see :doc:`installing`) and ``$ eelbrain`` launch
   script (see :doc:`getting_started`).
@@ -201,7 +218,7 @@ New in 0.24
   space with ``mne_experiment.rm('bem-sol-file', subject='*')``.
 * New :meth:`MneExperiment.make_report_coreg` method.
 * New :class:`MneExperiment`: analysis parameter
-  :ref:`analysis-params-connectivity`
+  :ref:`state-connectivity`
 * :class:`plot.TopoButterfly`: press ``Shift-T`` for a large topo-map with
   sensor names.
 
@@ -259,7 +276,7 @@ New in 0.20
 
 * :class:`MneExperiment`: new analysis parameter ``select_clusters='all'`` to
   keep all clusters in cluster tests (see
-  :ref:`analysis-params-select_clusters`).
+  :ref:`state-select_clusters`).
 * Use :func:`testnd.configure` to limit the number of CPUs that are used in
   permutation cluster tests.
 

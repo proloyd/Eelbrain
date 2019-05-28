@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
 """Plot topographic maps of sensor space data."""
 from collections import Sequence
@@ -412,9 +411,8 @@ class TopoButterfly(ColorMapMixin, TimeSlicerEF, TopoMapKey, YLimMixin,
             self.bfly_plots.append(h)
 
         # decorate axes
-        e0 = data.data[0][0]
-        self._configure_xaxis_dim(e0.time, xlabel, xticklabels, self.bfly_axes)
-        self._configure_yaxis(e0, ylabel, self.bfly_axes)
+        self._configure_xaxis_dim(data.time_dim, xlabel, xticklabels, self.bfly_axes)
+        self._configure_yaxis(data, ylabel, self.bfly_axes)
 
         # setup callback
         XAxisMixin._init_with_data(self, data.data, xdim, xlim, self.bfly_axes)
@@ -424,7 +422,7 @@ class TopoButterfly(ColorMapMixin, TimeSlicerEF, TopoMapKey, YLimMixin,
         self._realtime_topo = True
         self._t_label = None  # time label under lowest topo-map
         self._frame .store_canvas()
-        self._update_topo(e0.time[0])
+        self._update_topo(data.time_dim[0])
 
         self._show(crosshair_axes=self.bfly_axes)
         self._init_controller()
@@ -448,13 +446,11 @@ class TopoButterfly(ColorMapMixin, TimeSlicerEF, TopoMapKey, YLimMixin,
         p = self.bfly_plots[ax.id // 2]
         if ax in self.bfly_axes:
             t = event.xdata
-            seg = [l.sub(time=t) for l in p.data]
         elif ax in self.topo_axes:
             t = self._current_time
-            seg = [p.data[ax.id // 2].sub(time=t)]
         else:
             return
-
+        seg = [l.sub(time=t) for l in p.data]
         return seg, "%i ms" % round(t * 1e3), self._topo_kwargs['proj']
 
     def _on_leave_axes_status_text(self, event):

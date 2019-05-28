@@ -3,7 +3,7 @@
 from multiprocessing import cpu_count
 import os
 
-from ._colorspaces import to_rgb
+from matplotlib.colors import to_rgb
 
 
 SUPPRESS_WARNINGS = True

@@ -13,7 +13,7 @@ dependencies:
 - libcblas
 - numpy
 - scipy >= 1.1
-- matplotlib >= 2.1
+- matplotlib >= 3
 - pyarrow
 - pillow
 - psutil
@@ -44,7 +44,6 @@ dependencies:
 - pydocstyle
 # testing
 - flake8
-- nose
 - pytest
 - pytest-cov
 - pytest-faulthandler

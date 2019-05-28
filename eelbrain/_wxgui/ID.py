@@ -32,7 +32,6 @@ EXEC_FILE = wx.NewIdRef()
 EXEC_SELECTION = wx.NewIdRef()
 
 FIG_TITLE = wx.NewIdRef()
-FIND_RARE_EVENTS = wx.NewIdRef()
 FOCUS_SHELL = wx.NewIdRef()
 
 GRAND_AVERAGE = wx.NewIdRef()

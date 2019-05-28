@@ -98,6 +98,8 @@ class Epoch(EpochBase):
         if baseline is None:
             if tmin >= 0:
                 baseline = False
+            elif tmax < 0:
+                baseline = (None, None)
             else:
                 baseline = (None, 0)
         elif baseline is False:
@@ -154,7 +156,8 @@ class PrimaryEpoch(Epoch):
         Alternative to ``samplingrate``. Decimate the data by this factor
         (i.e., only keep every ``decim``'th sample).
     baseline : tuple
-        The baseline of the epoch (default ``(None, 0)``).
+        The baseline of the epoch (default ``(None, 0)``; if ``tmin > 0``: no
+        baseline; if ``tmax < 0``: the whole interval).
     n_cases : int
         Expected number of epochs. If n_cases is defined, a RuntimeError error
         will be raised whenever the actual number of matching events is different.
@@ -253,7 +256,7 @@ class SuperEpoch(Epoch):
 
     Parameters
     ----------
-    sub_epochs : tuple of str
+    sub_epochs : sequence of str
         Tuple of epoch names. These epochs are combined to form the super-epoch.
         Epochs are merged at the level of events, so the base epochs can not
         contain post-baseline trigger shifts which are applied after loading
@@ -341,13 +344,14 @@ class EpochCollection(EpochBase):
                 param_repr = ', '.join(repr(v) for v in values)
                 raise DefinitionError(f"Epoch {name}: All sub-epochs must have the same setting for {param}, got {param_repr}")
             setattr(out, param, values.pop())
-        # sessions, with preserved order
-        out.sessions = []
-        out.rej_file_epochs = []
+        # dependencies
+        sessions = set()
+        rej_file_epochs = set()
         for e in sub_epochs:
-            if e.session not in out.sessions:
-                out.sessions.append(e.session)
-            out.rej_file_epochs.extend(e.rej_file_epochs)
+            sessions.update(e.sessions)
+            rej_file_epochs.update(e.rej_file_epochs)
+        out.sessions = sorted(sessions)
+        out.rej_file_epochs = sorted(rej_file_epochs)
         return out
 
 

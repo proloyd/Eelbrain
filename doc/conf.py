@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-#
 # Eelbrain documentation build configuration file, created by
 # sphinx-quickstart on Tue Mar 29 23:16:11 2011.
 #
@@ -16,6 +14,7 @@ import os
 from pathlib import Path
 from warnings import filterwarnings
 
+import mne
 import eelbrain.plot._brain_object  # make sure that Brain is available
 import eelbrain
 
@@ -63,12 +62,11 @@ sphinx_gallery_conf = {
     'min_reported_time': 4,
     'download_all_examples': False,
     'reset_modules': ('matplotlib', use_pyplot),
-    'first_notebook_cell': (
-        "from eelbrain import configure\n"
-        "configure(frame=False)\n"  # avoid wxPython dependency
-        "%matplotlib inline\n"  # sphinx-gallery default
-    )
+    'reference_url': {'eelbrain': None},
 }
+
+# download datasets (to avoid progress bar output in example gallery)
+root = mne.datasets.mtrf.data_path()
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['templates']
@@ -139,6 +137,7 @@ intersphinx_mapping = {
     'python': ('https://docs.python.org/3.6', None),
     'imageio': ('https://imageio.readthedocs.io/en/stable/', None),
     'mne': ('http://martinos.org/mne/stable', None),
+    'surfer': ('https://pysurfer.github.io', None),
     'matplotlib': ('https://matplotlib.org', None),
     'nilearn': ('https://nilearn.github.io', None),
     'numpy': ('https://docs.scipy.org/doc/numpy', None),

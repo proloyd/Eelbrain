@@ -1,6 +1,6 @@
 # Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
 from numpy.testing import assert_array_equal
-from nose.tools import eq_, assert_in, assert_raises, assert_greater
+import pytest
 
 from eelbrain import datasets, plot
 from eelbrain._colorspaces import SymmetricNormalize
@@ -14,31 +14,32 @@ def test_generate_colors():
     cells_2 = ('a', 'b', 'c')
 
     colors = plot.colors_for_oneway(cells_1)
-    eq_(len(colors), len(cells_1))
+    assert len(colors) == len(cells_1)
 
     colors = plot.colors_for_twoway(cells_1, cells_2)
-    eq_(len(colors), len(cells_1) * len(cells_2))
+    assert len(colors) == len(cells_1) * len(cells_2)
 
     colors = plot.colors_for_twoway(cells_2, cells_1)
-    eq_(len(colors), len(cells_1) * len(cells_2))
+    assert len(colors) == len(cells_1) * len(cells_2)
 
     # colors_for_categorial()
     f = ds['A']
     colors = plot.colors_for_categorial(f)
     for cell in f.cells:
-        assert_in(cell, colors)
+        assert cell in colors
 
     i = ds.eval("A%B")
     colors = plot.colors_for_categorial(i)
     for cell in i.cells:
-        assert_in(cell, colors)
+        assert cell in colors
 
     i = ds.eval("A%B%rm")
     colors = plot.colors_for_categorial(i)
     for cell in i.cells:
-        assert_in(cell, colors)
+        assert cell in colors
 
-    assert_raises(TypeError, plot.colors_for_categorial, "A%B")
+    with pytest.raises(TypeError):
+        plot.colors_for_categorial("A%B")
 
 
 @hide_plots
@@ -73,8 +74,8 @@ def test_plot_colors():
 
     p = plot.ColorList(colors, labels={'A': 'A'*50, 'B': 'Bbb'})
     w, h = p.figure.get_size_inches()
-    eq_(h, h0)
-    assert_greater(w, w0)
+    assert h == h0
+    assert w > w0
     p.close()
 
     colors = plot.colors_for_twoway(cells_1, cells_2)

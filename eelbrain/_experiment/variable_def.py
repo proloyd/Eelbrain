@@ -267,8 +267,10 @@ class Variables:
     def __eq__(self, other):
         return isinstance(other, Variables) and other.vars == self.vars
 
-    def apply(self, ds, e):
+    def apply(self, ds, e, group_only=False):
         session = ds.info.get('session', None)
         for name, vdef in self.vars.items():
-            if vdef.session is None or vdef.session == session:
+            if group_only and not isinstance(vdef, GroupVar):
+                continue
+            elif vdef.session is None or vdef.session == session:
                 ds[name] = vdef.apply(ds, e)

@@ -10,9 +10,9 @@ from logging import getLogger
 import tempfile
 
 import numpy as np
+from matplotlib.backends.backend_wx import NavigationToolbar2Wx
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg
 from matplotlib.backend_bases import FigureCanvasBase, MouseEvent
-from matplotlib.backends import backend_wx
 from matplotlib.figure import Figure
 import wx
 
@@ -212,7 +212,7 @@ class CanvasFrame(EelbrainFrame):
         EelbrainFrame.Show(self, show)
 
     def add_mpl_toolbar(self):
-        self.toolbar = backend_wx.NavigationToolbar2Wx(self.canvas)
+        self.toolbar = NavigationToolbar2Wx(self.canvas)
         self.toolbar.Realize()
         if 0:  # wx.Platform == '__WXMAC__':
             # Mac platform (OSX 10.3, MacPython) does not seem to cope with
