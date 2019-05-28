@@ -9419,8 +9419,8 @@ class VolumeSourceSpace(SourceSpaceBase):
 
     def _init_secondary(self):
         SourceSpaceBase._init_secondary(self)
-        if len(self.vertices) != 1:
-            raise ValueError("A VolumeSourceSpace needs exactly one vertices array")
+        # if len(self.vertices) != 1:
+        #     raise ValueError("A VolumeSourceSpace needs exactly one vertices array")
 
     @LazyProperty
     def hemi(self):
@@ -9435,9 +9435,9 @@ class VolumeSourceSpace(SourceSpaceBase):
         return np.sum(self.hemi == 'rh')
 
     def __iter__(self):
-        return map(str, self.vertices[0])
+        return map(str, self.vertices[0])   #TODO
 
-    def __getitem__(self, index):
+    def __getitem__(self, index):   # TODO
         if isinstance(index, Integral):
             try:
                 return str(self.vertices[0][index])
@@ -9450,17 +9450,17 @@ class VolumeSourceSpace(SourceSpaceBase):
                 self.subjects_dir, parc, self._subgraph(index), self.name)
 
     def _as_uv(self):
-        return Factor(self.vertices[0], name=self.name)
+        return Factor(self.vertices[0] if len(self.vertices) else np.concatenate(tuple(self.vertices)), name=self.name)
 
     def _compute_connectivity(self):
-        src = self.get_source_space()
-        coords = src[0]['rr'][self.vertices[0]]
+        # src = self.get_source_space()
+        coords = self.coordinates
         dist_threshold = self.grade * 0.0011
         return _point_graph(coords, dist_threshold)
 
     def _distances(self):
-        sss = self.get_source_space()
-        coords = sss[0]['rr'][self.vertices[0]]
+        # sss = self.get_source_space()
+        coords = self.coordinates
         return squareform(pdist(coords))
 
     def _array_index(self, arg, allow_vertex=True):
