@@ -1,7 +1,8 @@
-# Author: Proloy Das <proloy@umd.edu>
 # cython: boundscheck=False, wraparound=False
+# cython: profile=False
 # distutils: language = c++
-# setuptools: include_dirs = dsyevh3C/
+# distutils: include_dirs = dsyevh3C/
+# Author: Proloy Das <proloy@umd.edu>
 """
 optimized statistics functions
 
