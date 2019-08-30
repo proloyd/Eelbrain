@@ -54,7 +54,7 @@ extensions = [
     Extension('eelbrain._stats.connectivity_opt', [f'eelbrain/_stats/connectivity_opt{ext}']),
     Extension('eelbrain._stats.opt', [f'eelbrain/_stats/opt{ext}']),
     Extension('eelbrain._stats.error_functions', [f'eelbrain/_stats/error_functions{ext}']),
-    Extension('eelbrain._stats.vector', [f'eebrain/_stats/vector{ext_cpp}'],
+    Extension('eelbrain._stats.vector', [f'eelbrain/_stats/vector{ext_cpp}'],
               language=['c++'],
               include_dirs=['dsyevh3C'],
               extra_compile_args=['-stdlib=libc++'],
