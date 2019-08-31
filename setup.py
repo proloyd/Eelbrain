@@ -24,6 +24,9 @@ from setuptools import setup, find_packages, Extension
 
 import numpy as np
 
+import os
+os.environ["CC"] = "g++"
+
 # Distributing Cython modules
 # https://cython.readthedocs.io/en/stable/src/userguide/source_files_and_compilation.html#distributing-cython-modules
 try:
@@ -56,9 +59,7 @@ extensions = [
     Extension('eelbrain._stats.error_functions', [f'eelbrain/_stats/error_functions{ext}']),
     Extension('eelbrain._stats.vector', [f'eelbrain/_stats/vector{ext_cpp}'],
               language=['c++'],
-              include_dirs=['dsyevh3C'],
-              extra_compile_args=['-stdlib=libc++'],
-              extra_link_args=['-stdlib=libc++']),
+              include_dirs=['dsyevh3C'])
 ]
 if cythonize:
     extensions = cythonize(extensions)
