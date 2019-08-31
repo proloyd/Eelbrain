@@ -24,10 +24,10 @@ from setuptools import setup, find_packages, Extension
 
 import numpy as np
 
-import os
-import sys
-if sys.platform == 'darwin':
-    os.environ["CC"] = "g++"
+# import os
+# import sys
+# if sys.platform == 'darwin':
+#     os.environ["CC"] = "g++"
 
 # Distributing Cython modules
 # https://cython.readthedocs.io/en/stable/src/userguide/source_files_and_compilation.html#distributing-cython-modules
@@ -61,7 +61,9 @@ extensions = [
     Extension('eelbrain._stats.error_functions', [f'eelbrain/_stats/error_functions{ext}']),
     Extension('eelbrain._stats.vector', [f'eelbrain/_stats/vector{ext_cpp}'],
               language=['c++'],
-              include_dirs=['dsyevh3C'])
+              include_dirs=['dsyevh3C'],
+              extra_compile_args=['-lm'],
+              extra_link_args=['-lm'])
 ]
 if cythonize:
     extensions = cythonize(extensions)
