@@ -57,8 +57,8 @@ extensions = [
     Extension('eelbrain._stats.vector', [f'eelbrain/_stats/vector{ext_cpp}'],
               language=['c++'],
               include_dirs=['dsyevh3C'],
-              extra_compile_args=['-stdlib=libc++'],
-              extra_link_args=['-stdlib=libc++']),
+              extra_compile_args=['-lm', '-g'],
+              extra_link_args=['-g']),
 ]
 if cythonize:
     extensions = cythonize(extensions)
