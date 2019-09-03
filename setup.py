@@ -24,6 +24,11 @@ from setuptools import setup, find_packages, Extension
 
 import numpy as np
 
+# import os
+# import sys
+# if sys.platform == 'darwin':
+#     os.environ["CC"] = "g++"
+
 # Distributing Cython modules
 # https://cython.readthedocs.io/en/stable/src/userguide/source_files_and_compilation.html#distributing-cython-modules
 try:
