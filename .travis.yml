@@ -46,7 +46,7 @@ install:
 
 script:
   - if [ "${TRAVIS_OS_NAME}" == "osx" ]; then
-      make testw;
+      travis_wait make testw;
     else
-      make test;
+      travis_wait make test;
     fi;

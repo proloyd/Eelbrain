@@ -17,10 +17,10 @@ flake:
 	flake8 --count eelbrain examples scripts
 
 test: style-check
-	travis_wait pytest eelbrain
+	pytest eelbrain
 
 testw:
-	pythonw travis_wait $(shell which pytest) eelbrain
+	pythonw $(shell which pytest) eelbrain
 
 pypi:
 	rm -rf build dist
