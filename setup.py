@@ -52,10 +52,12 @@ ext_cpp = '.pyx' if cythonize else '.cpp'
 extensions = [
     Extension('eelbrain._data_opt', [f'eelbrain/_data_opt{ext}'], **args),
     Extension('eelbrain._trf._boosting_opt', [f'eelbrain/_trf/_boosting_opt{ext}'], **args),
+    Extension('eelbrain._ncrf._ncrf_opt', [f'eelbrain/_ncrf/_ncrf_opt{ext}']),
     Extension('eelbrain._stats.connectivity_opt', [f'eelbrain/_stats/connectivity_opt{ext}'], **args),
     Extension('eelbrain._stats.opt', [f'eelbrain/_stats/opt{ext}'], **args),
     Extension('eelbrain._stats.error_functions', [f'eelbrain/_stats/error_functions{ext}'], **args),
     Extension('eelbrain._stats.vector', [f'eelbrain/_stats/vector{ext_cpp}'], include_dirs=['dsyevh3C'], **args),
+    Extension('eelbrain._ncrf._dsyevh3py', [f'eelbrain/_ncrf/_dsyevh3py{ext_cpp}'], include_dirs=['dsyevh3C'], **args),
 ]
 if cythonize:
     extensions = cythonize(extensions)
