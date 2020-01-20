@@ -39,6 +39,7 @@ before_install:
   - . $HOME/miniconda/etc/profile.d/conda.sh
   - conda activate condaenv
   - python -c "import mne; mne.datasets.testing.data_path()"
+  - python -c "import eelbrain; eelbrain._ncrf.test_ncrf.load()"
   - python --version
 
 install:

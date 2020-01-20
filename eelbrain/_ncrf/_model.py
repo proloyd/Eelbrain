@@ -158,7 +158,7 @@ def _inv_sqrtm(m, return_eig=False):
 
 
 def _compute_gamma_i(z, x):
-    """ Comptes Gamma_i
+    """Comptes Gamma_i
 
     Gamma_i = Z**(-1/2) * ( Z**(1/2) X X' Z**(1/2)) ** (1/2) * Z**(-1/2)
            = V(E)**(-1/2)V' * ( V ((E)**(1/2)V' X X' V(E)**(1/2)) V')** (1/2) * V(E)**(-1/2)V'
@@ -1184,7 +1184,7 @@ class ncRF:
 
 # Functions used for initialize \Gamma
 def find_mu(s, y, eta=1, tol=1e-8, max_iter=1000):
-    """
+    """Functions used for initialize Gamma
 
     :param s: singular values
     :param y: data whitened by left eigen matrix of svd of L

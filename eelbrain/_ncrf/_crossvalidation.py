@@ -13,7 +13,6 @@ from tqdm import tqdm
 class CVResult:
     """Object for storing cross-validation info
 
-
     Parameters
     ----------
     mu: float
