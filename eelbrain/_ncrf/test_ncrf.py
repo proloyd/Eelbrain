@@ -34,6 +34,7 @@ def load(name):
     return v
 
 
+@pytest.mark.slow
 def test_ncrf():
     meg = load('meg').sub(time=(0, 5))
     stim = load('stim').sub(time=(0, 5))
