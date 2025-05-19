@@ -1,11 +1,7 @@
 # Helper to download data for Alice example
-import hashlib
-import shutil
 from pathlib import Path
-from urllib.request import urlretrieve
-import zipfile
 
-from pooch import file_hash
+import pooch
 
 from .._types import PathArg
 
@@ -13,28 +9,23 @@ from .._types import PathArg
 def get_alice_path(
         path: PathArg = Path("~/Data/Alice"),
 ):
-    md5 = hashlib.md5()
-
     path = Path(path).expanduser().resolve()
-    if path.exists():
-        return path
     path.mkdir(exist_ok=True, parents=True)
-    urls = [
-        ['https://drum.lib.umd.edu/bitstream/handle/1903/27591/stimuli.zip', '4336a47bef7d3e63239c40c0623dc186'],
-        # ['https://drum.lib.umd.edu/bitstream/handle/1903/27591/eeg.0.zip', 'd63d96a6e5080578dbf71320ddbec0a0'],
-        ['https://drum.lib.umd.edu/bitstream/handle/1903/27591/eeg.1.zip', 'bdc65f168db4c0f19bb0fed20eae129b'],  # S15-S34
-        # ['https://drum.lib.umd.edu/bitstream/handle/1903/27591/eeg.2.zip', '3fb33ca1c4640c863a71bddd45006815'],
-    ]
 
-    for url, hash in urls:
-        temp_file_path, header = urlretrieve(url)
-        # with open(temp_file_path, "rb") as f:
-        #     for chunk in iter(lambda: f.read(1048576), b""):
-        #         md5.update(chunk)
-        # file_hash = md5.hexdigest()
-        # if file_hash != hash:
-        #     raise RuntimeError(f'Hash mismatch for {url}: {file_hash} != {hash}')
-        with zipfile.ZipFile(temp_file_path, 'r') as f:
-            f.extractall(path)
-        Path(temp_file_path).unlink()
+    baseurl = 'https://drum.lib.umd.edu/bitstream/handle/1903/27591/'
+    registry = {
+        'stimuli.zip': '92317dbfc81d6aef14fc334abd75d1165cf57501f0c11f8db1a47c76c3d90ac6',
+        'eeg.1.zip': 'a645e4bf30ec8de10c92f82e9f842dd8172a4871f8eb23244e7e78b7dff157aa'
+    }
+    fetcher = pooch.Pooch(
+        path=path,
+        base_url=baseurl,
+        registry=registry,
+        retry_if_failed=4,
+    )
+    for fname in registry.keys():
+        if (path / fname.split('.')[0]).exists():   # Won't work for multiple eeg.x.zip download
+            continue
+        fetcher.fetch(fname, processor=pooch.Unzip(extract_dir='.'))
+        (path / fname).unlink()
     return path
