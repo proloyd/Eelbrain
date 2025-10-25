@@ -102,12 +102,7 @@ class RawPipe:
                     ch_names = raw.ch_names
                 else:
                     raise FileMissingError(f"Raw input file does not exist at expected location {path.fpath}")
-                ch_status = []
-                for name in ch_names:
-                    if name in raw.info['bads']:
-                        ch_status.append('bad')
-                    else:
-                        ch_status.append('good')
+                ch_status = ['bad' if ch in raw.info['bads'] else 'good' for ch in ch_names]
                 pd.DataFrame({
                     'name': ch_names,
                     'status': ch_status,
@@ -291,11 +286,6 @@ class RawSource(RawPipe):
         self.montage = montage
         self.adjacency = adjacency
         self._kwargs = kwargs
-        # TODO: Should we keep this?
-        # if MNE_VERSION < V0_19 and reader is mne.io.read_raw_cnt:
-        #     self._read_raw_kwargs = {'montage': None, **kwargs}
-        # else:
-        #     self._read_raw_kwargs = kwargs
 
     def _can_link(self, pipes: Dict[str, RawPipe]) -> bool:
         return True
@@ -358,7 +348,7 @@ class RawSource(RawPipe):
     def load_info(self, path: BIDSPath) -> mne.Info:
         return self.load(path).info
 
-    def get_adjacency(self, data: str) -> Union[str, List[Tuple[str, str]], Path]:
+    def get_adjacency(self, data: str) -> Union[str, List[Tuple[str, str]], Path, None]:
         if data == 'eog':
             return None
         else:
@@ -837,8 +827,9 @@ class RawICA(CachedRawPipe):
             raise_on_mismatch: bool = False,
             raw_name: str = None,
             subject: str = None,
-            return_missing: bool = False,  # if ICA is only missing channels, retrun those
+            return_missing: bool = False,  # if ICA is missing channels, return those (they can be dropped in data)
     ) -> bool | tuple:
+        "Check whether `ica` and `info` contain the same channels"
         picks = mne.pick_types(info, meg=True, eeg=True, ref_meg=False)
         raw_ch_names = [info.ch_names[i] for i in picks]
         names_match = ica.ch_names == raw_ch_names
