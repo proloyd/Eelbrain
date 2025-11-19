@@ -327,7 +327,20 @@ class RawSource(RawPipe):
             preload: bool,
     ) -> mne.io.BaseRaw:
         raw_path = self.get_path(path)
-        raw = mne.io.read_raw_fif(
+        match path.extension:
+            case '.fif':
+                reader = mne.io.read_raw_fif
+            case '.edf':
+                reader = mne.io.read_raw_edf
+            case '.vhdr':
+                reader = mne.io.read_raw_brainvision
+            case '.set':
+                reader = mne.io.read_raw_eeglab
+            case '.bdf':
+                reader = mne.io.read_raw_bdf
+            case _:
+                raise RuntimeError(f"Unrecognized file format: {path.suffix}")
+        raw = reader(
             raw_path,
             preload=preload,
             verbose='critical',
@@ -381,6 +394,7 @@ class RawSource(RawPipe):
         if 'status' not in channels_df.columns.tolist():
             self.log.info("Generating bad_channels for %s", path.fpath)
             self.make_bad_channels_auto(path)
+            channels_df = pd.read_csv(bads_path, sep='\t')
         bad_chs = channels_df.query('status == "bad"')['name'].tolist()
         if existing is not None:
             bad_chs = [ch for ch in bad_chs if ch in existing]
@@ -420,14 +434,20 @@ class RawSource(RawPipe):
             flat: float = None,
             redo: bool = False,
     ) -> None:
+        if flat is None:
+            if path.datatype == 'meg':
+                flat = 1e-14
+            elif path.datatype == 'eeg':
+                return
+            else:
+                raise NotImplementedError(f"{path.datatype=}")
+        elif flat == 0:
+            return
         raw = self.load(path, add_bads=False)
         bad_chs: list[str] = raw.info['bads']
-        if flat is None:
-            flat = 1e-14  # May need a setting to exclude the EEG reference?
-        if flat:
-            sysname = self.get_sysname(raw.info, path.entities['subject'], None)
-            raw = load.mne.raw_ndvar(raw, sysname=sysname, adjacency=self.adjacency)
-            bad_chs.extend(raw.sensor.names[raw.std('time') < flat])
+        sysname = self.get_sysname(raw.info, path.entities['subject'], None)
+        raw = load.mne.raw_ndvar(raw, sysname=sysname, adjacency=self.adjacency)
+        bad_chs.extend(raw.sensor.names[raw.std('time') < flat])
         self.make_bad_channels(path, bad_chs, redo)
 
     def mtime(
@@ -1249,7 +1269,7 @@ def assemble_pipeline(
                 if isinstance(pipe, RawICA):
                     missing = set(pipe.task).difference(tasks)
                     if missing:
-                        raise DefinitionError(f"RawICA {key!r} lists one or more non-exising tasks: {', '.join(missing)}")
+                        raise DefinitionError(f"RawICA {key!r} lists one or more non-exising tasks: {', '.join(missing)}. Available tasks: {', '.join(tasks)}.")
                 linked_raw[key] = pipe
         if len(raw) == n:
             raise DefinitionError(f"Unable to resolve source for raw {enumeration(raw)}, circular dependency?")

@@ -17,7 +17,8 @@ from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple, Union
 import numpy as np
 import mne
 from mne.minimum_norm import make_inverse_operator, apply_inverse, apply_inverse_epochs, apply_inverse_raw
-from mne_bids import BIDSPath, get_entity_vals, get_datatypes
+import mne_bids
+from mne_bids import BIDSPath, get_entity_vals
 
 from .. import fmtxt
 from .. import gui
@@ -212,7 +213,6 @@ class Pipeline(FileTree):
     check_raw_mtime: bool = True  # check raw input files' mtime for change
 
     datatype: str = None
-    extension: str = '.fif'
     ignore_entities: dict[str, list[str]] = {}
     preload: bool = False
 
@@ -514,13 +514,20 @@ class Pipeline(FileTree):
         if self.datatype is not None:
             self._datatype = self.datatype
         else:
-            datatypes = tuple(get_datatypes(root))
+            datatypes = tuple(mne_bids.get_datatypes(root))
             if 'meg' in datatypes and 'eeg' in datatypes:
                 raise DefinitionError(f"Can't infer datatype. Both MEG and EEG data found in {root}.")
             elif 'meg' in datatypes:
                 self._datatype = 'meg'
+                extensions = ('.fif', )
             elif 'eeg' in datatypes:
                 self._datatype = 'eeg'
+                data_extensions = {path.extension for path in mne_bids.find_matching_paths(root, datatypes='eeg', suffixes='eeg', extensions=['.edf', '.vhdr', '.set', '.bdf', '.fif'])}
+                if len(data_extensions) == 0:
+                    raise FileMissingError(f"No EEG data files found in {root}.")
+                elif len(data_extensions) > 1:
+                    raise DefinitionError(f"Multiple EEG data file types found in {root}: {enumeration(sorted(data_extensions))}.")
+                extensions = tuple(data_extensions)
             else:
                 raise DefinitionError(f"Can't infer datatype. No MEG or EEG data found in {root}.")
 
@@ -616,7 +623,7 @@ class Pipeline(FileTree):
         self._register_field('run', self._runs or None, repr=True)
         self._register_field('datatype', ('meg', 'eeg'), self._datatype, repr=True)
         self._register_field('suffix', ('meg', 'eeg'), self._datatype, repr=True)
-        self._register_field('extension', ('.fif', ), self.extension, repr=True)
+        self._register_field('extension', extensions, repr=True)
 
         self._register_field('mri', sorted(self._mri_subjects), allow_empty=True)
         self._register_field('group', self._groups.keys(), 'all', post_set_handler=self._post_set_group)
@@ -747,14 +754,12 @@ class Pipeline(FileTree):
         raw_missing = input_state['raw_missing'] = set()
         raw_mtimes = input_state['raw-mtimes']
 
-        pipe = self._raw['raw']
         self._raw_samplingrate = {}  # {(subject, recording): samplingrate}
         with self._temporary_state:
             # subjects_with_raw_changes = set()
             for subject, session, task, acquisition, run in self.iter(('subject', 'session', 'task', 'acquisition', 'run'), group='all', raw='raw'):
                 key = (subject, session, task, acquisition, run)
-                raw_path = pipe.get_path(self._bids_path)
-                if raw_path is None:
+                if not self._bids_path.fpath.exists():
                     raw_missing.add(key)
                     if self.check_raw_mtime:
                         log.debug("Raw file missing: %s", self._bids_path.fpath)
@@ -1699,8 +1704,8 @@ class Pipeline(FileTree):
         self._check_ds(ds, f'{self.__class__.__name__}.fix_events()', info)
 
         # add standard variables
-        ds['T'] = ds['i_start'] / ds.info['sfreq']
-        ds['SOA'] = ds['T'].diff(0)
+        ds['time'] = ds['i_start'] / ds.info['sfreq']
+        ds['SOA'] = ds['time'].diff(0)
         ds['subject'] = Factor([ds.info['subject']], repeat=ds.n_cases, random=True)
         if len(self._tasks) > 1:
             ds[:, 'task'] = ds.info['task']
@@ -2113,7 +2118,7 @@ class Pipeline(FileTree):
         if isinstance(epoch, ContinuousEpoch):
             # find splitting points
             split_threshold = epoch.split + (epoch.pad_end + epoch.pad_start)
-            diff = ds['T'].diff(to_begin=split_threshold + 1)
+            diff = ds['time'].diff(to_begin=split_threshold + 1)
             onsets = np.flatnonzero(diff >= split_threshold)
             # make sure we are not messing up user events
             if illegal := {'T_relative', 'events', 'tmax'}.intersection(ds):
@@ -2130,7 +2135,7 @@ class Pipeline(FileTree):
             ds.info['nested_events'] = 'events'
             ds['events'] = events
             tmin = -epoch.pad_start
-            ds['tmax'] = Var([e[-1, 'T'] - e[0, 'T'] + epoch.pad_end for e in events])
+            ds['tmax'] = Var([e[-1, 'time'] - e[0, 'time'] + epoch.pad_end for e in events])
             tmax = 'tmax'
 
         # load sensor space data
@@ -4087,7 +4092,7 @@ class Pipeline(FileTree):
         pipe = self._raw[self.get('raw', **kwargs)]
         pipe.make_bad_channels(self._bids_path, bad_chs, redo)
 
-    def make_bad_channels_auto(self, flat=1e-14, redo=False, **state):
+    def make_bad_channels_auto(self, flat=None, redo=False, **state):
         """Automatically detect bad channels
 
         Works on ``raw='raw'``
@@ -4096,7 +4101,7 @@ class Pipeline(FileTree):
         ----------
         flat : scalar
             Threshold for detecting flat channels: channels with ``std < flat``
-            are considered bad (default 1e-14).
+            are considered bad (default 1e-14 for MEG and 0 for EEG).
         redo : bool
             If the file already exists, replace it (instead of adding).
         ...
@@ -4269,7 +4274,7 @@ class Pipeline(FileTree):
             evoked_version = int(re.match(r"Eelbrain (\d+)", evoked[0].info['description']).group(1))
             if evoked_version >= 13:
                 ds = self.load_selected_events(data_raw=data_raw, vardef=vardef)
-                ds = ds.aggregate(model, drop_bad=True, equal_count=equal_count, drop=('i_start', 't_edf', 'T', 'index', 'trigger'))
+                ds = ds.aggregate(model, drop_bad=True, equal_count=equal_count, drop=('i_start', 't_edf', 'time', 'index', 'trigger'))
                 # check cells
                 if model_vars:
                     cells = [' % '.join(cell) or 'No comment' for cell in ds.zip(*model_vars)]
@@ -4295,7 +4300,7 @@ class Pipeline(FileTree):
             ds = self.load_epochs(ndvar=False, samplingrate=samplingrate, decim=decim, data_raw=data_raw, interpolate_bads='keep', vardef=vardef)
 
         # aggregate
-        ds_agg = ds.aggregate(model, drop_bad=True, equal_count=equal_count, drop=('i_start', 't_edf', 'T', 'index', 'trigger'), never_drop=('epochs',))
+        ds_agg = ds.aggregate(model, drop_bad=True, equal_count=equal_count, drop=('i_start', 't_edf', 'time', 'index', 'trigger'), never_drop=('epochs',))
         ds_agg.rename('epochs', 'evoked')
 
         # save
