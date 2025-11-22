@@ -7,7 +7,7 @@ import inspect
 from itertools import chain, product
 import logging
 import os
-from os.path import basename, exists, getmtime, isdir, join, relpath, splitext
+from os.path import basename, exists, getmtime, isdir, join, relpath
 from pathlib import Path
 import re
 import shutil
@@ -50,12 +50,12 @@ from .covariance import EpochCovariance, RawCovariance
 from .definitions import FieldCode, find_dependent_epochs, find_epochs_vars, log_dict_change, log_list_change, tuple_arg
 from .epochs import ContinuousEpoch, PrimaryEpoch, SecondaryEpoch, SuperEpoch, EpochBase, EpochCollection, assemble_epochs, decim_param
 from .exceptions import FileMissingError
-from .experiment import FileTree, LayeredDict
+from .experiment import FileTree
 from .groups import assemble_groups
 from .parc import SEEDED_PARC_RE, CombinationParc, EelbrainParc, FreeSurferParc, FSAverageParc, SeededParc, IndividualSeededParc, LabelParc, VolumeParc, Parcellation, SubParc, assemble_parcs
 from .preprocessing import (
     assemble_pipeline, RawPipe, RawSource, RawICA, RawApplyICA, RawFilter,
-    compare_pipelines, ask_to_delete_ica_files, remove_task, remove_subject, get_subject_session)
+    compare_pipelines, ask_to_delete_ica_files)
 from .test_def import (
     Test,
     ROITestResult, ROI2StageResult, TestDims, TwoStageTest,
@@ -77,6 +77,13 @@ CACHE_STATE_VERSION = 17
 #  16:  stim_channel attribute, store in input_state
 
 BIDS_ENTITY_KEYS = ['subject', 'session', 'task', 'acquisition', 'run', 'datatype', 'suffix', 'extension']
+BIDS_ENTITY_PREFIX_MAP = {
+    'subject': 'sub',
+    'session': 'ses',
+    'task': 'task',
+    'acquisition': 'acq',
+    'run': 'run',
+}
 
 # paths
 LOG_FILE = join('{root}', 'derivatives', 'eelbrain', 'eelbrain {name}.log')
@@ -143,6 +150,18 @@ def guess_y(ds, default=None):
     if default is not None:
         return default
     raise RuntimeError(f"Could not find data in {ds}")
+
+
+def generate_bids_template(entities: set[str]) -> str:
+    "Generate a BIDS filename template from entity names"
+    parts = []
+    for name in ('subject', 'session', 'task', 'acquisition', 'run'):
+        if name not in entities:
+            continue
+        prefix = BIDS_ENTITY_PREFIX_MAP[name]
+        parts.append(f'{prefix}-{{{name}}}')
+    parts.append('{suffix}')
+    return '_'.join(parts)
 
 
 class DictSet:
@@ -373,12 +392,52 @@ class Pipeline(FileTree):
         if not isinstance(self.auto_delete_results, bool):
             raise TypeError(f"{self.__class__.__name__}.auto_delete_results={self.auto_delete_results!r}")
 
+        # BIDS entities
+        self._subjects = tuple(get_entity_vals(root, 'subject', **self.ignore_entities))
+        self._sessions = tuple(get_entity_vals(root, 'session', **self.ignore_entities))
+        self._tasks = tuple(get_entity_vals(root, 'task', **self.ignore_entities))
+        self._acquisitions = tuple(get_entity_vals(root, 'acquisition', **self.ignore_entities))
+        self._runs = tuple(get_entity_vals(root, 'run', **self.ignore_entities))
+        if self.datatype is not None:
+            self._datatype = self.datatype
+        else:
+            datatypes = tuple(mne_bids.get_datatypes(root))
+            if 'meg' in datatypes and 'eeg' in datatypes:
+                raise DefinitionError(f"Can't infer datatype. Both MEG and EEG data found in {root}.")
+            elif 'meg' in datatypes:
+                self._datatype = 'meg'
+                extensions = ('.fif',)
+            elif 'eeg' in datatypes:
+                self._datatype = 'eeg'
+                data_extensions = {path.extension for path in mne_bids.find_matching_paths(root, datatypes='eeg', suffixes='eeg', extensions=['.edf', '.vhdr', '.set', '.bdf', '.fif'])}
+                if len(data_extensions) == 0:
+                    raise FileMissingError(f"No EEG data files found in {root}.")
+                elif len(data_extensions) > 1:
+                    raise DefinitionError(f"Multiple EEG data file types found in {root}: {enumeration(sorted(data_extensions))}.")
+                extensions = tuple(data_extensions)
+            else:
+                raise DefinitionError(f"Can't infer datatype. No MEG or EEG data found in {root}.")
+        available_entities = [
+            'subject',
+            'session' if self._sessions else None,
+            'acquisition' if self._acquisitions else None,
+            'task',
+            'run' if self._runs else None,
+        ]
+        available_entities = {f for f in available_entities if f is not None}
+
         ########################################################################
         # Templates
         ###########
         self._templates = {
             'equalize_evoked_count': ('', 'eq'),
 
+            'raw_basename': generate_bids_template({'subject', 'session', 'acquisition', 'task', 'run'} & available_entities),
+            'epoch_basename': generate_bids_template({'subject', 'session', 'acquisition', 'run'} & available_entities),
+            'subject_session': generate_bids_template({'subject', 'session'} & available_entities),
+            'test_basename': generate_bids_template({'session', 'run'} & available_entities),
+
+            'raw-dir': join('{root}', 'sub-{subject}', 'ses-{session}' if self._sessions else '', '{datatype}'),
             'deriv-dir': join('{root}', 'derivatives'),
 
             # one ica-file for each task group
@@ -505,32 +564,6 @@ class Pipeline(FileTree):
         ########################################################################
         # Experiment arguments
         ######################
-        # BIDS entities
-        self._subjects = tuple(get_entity_vals(root, 'subject', **self.ignore_entities))
-        self._sessions = tuple(get_entity_vals(root, 'session', **self.ignore_entities))
-        self._tasks = tuple(get_entity_vals(root, 'task', **self.ignore_entities))
-        self._acquisitions = tuple(get_entity_vals(root, 'acquisition', **self.ignore_entities))
-        self._runs = tuple(get_entity_vals(root, 'run', **self.ignore_entities))
-        if self.datatype is not None:
-            self._datatype = self.datatype
-        else:
-            datatypes = tuple(mne_bids.get_datatypes(root))
-            if 'meg' in datatypes and 'eeg' in datatypes:
-                raise DefinitionError(f"Can't infer datatype. Both MEG and EEG data found in {root}.")
-            elif 'meg' in datatypes:
-                self._datatype = 'meg'
-                extensions = ('.fif', )
-            elif 'eeg' in datatypes:
-                self._datatype = 'eeg'
-                data_extensions = {path.extension for path in mne_bids.find_matching_paths(root, datatypes='eeg', suffixes='eeg', extensions=['.edf', '.vhdr', '.set', '.bdf', '.fif'])}
-                if len(data_extensions) == 0:
-                    raise FileMissingError(f"No EEG data files found in {root}.")
-                elif len(data_extensions) > 1:
-                    raise DefinitionError(f"Multiple EEG data file types found in {root}: {enumeration(sorted(data_extensions))}.")
-                extensions = tuple(data_extensions)
-            else:
-                raise DefinitionError(f"Can't infer datatype. No MEG or EEG data found in {root}.")
-
         # groups
         self._groups = assemble_groups(self.groups, set(self._subjects))
 
@@ -557,8 +590,7 @@ class Pipeline(FileTree):
         self._variables._check_trigger_vars()
 
         # epochs
-        # TODO: change `session` in epochs
-        epoch_default = {'session': self._tasks[0], **self.epoch_default}
+        epoch_default = {'task': self._tasks[0], **self.epoch_default}
         self._epochs = assemble_epochs(self.epochs, epoch_default)
 
         # epoch rejection
@@ -619,10 +651,10 @@ class Pipeline(FileTree):
         self._register_field('subject', self._subjects, repr=True)
         self._register_field('session', self._sessions or None, repr=True)
         self._register_field('task', self._tasks, depends_on=('epoch',), slave_handler=self._update_task, repr=True)
-        self._register_field('acquisition', self._acquisitions or None, repr=True)
+        self._register_field('acquisition',  self._acquisitions or None, repr=True)
         self._register_field('run', self._runs or None, repr=True)
-        self._register_field('datatype', ('meg', 'eeg'), self._datatype, repr=True)
-        self._register_field('suffix', ('meg', 'eeg'), self._datatype, repr=True)
+        self._register_field('datatype', (self._datatype,), self._datatype, repr=True)
+        self._register_field('suffix', (self._datatype,), self._datatype, repr=True)
         self._register_field('extension', extensions, repr=True)
 
         self._register_field('mri', sorted(self._mri_subjects), allow_empty=True)
@@ -631,11 +663,6 @@ class Pipeline(FileTree):
         # raw
         raw_default = sorted(self.raw)[0] if self.raw else None
         self._register_field('raw', sorted(self._raw), default=raw_default, repr=True)
-        self._register_field('raw_dir', depends_on=BIDS_ENTITY_KEYS, slave_handler=self._update_raw_dir, repr=True)
-        self._register_field('raw_basename', depends_on=BIDS_ENTITY_KEYS, slave_handler=self._update_raw_basename, repr=True)
-        self._register_field('epoch_basename', depends_on=[key for key in BIDS_ENTITY_KEYS if key not in ('task')], slave_handler=self._update_epoch_basename, repr=True)
-        self._register_field('subject_session', depends_on=('subject', 'session'), slave_handler=self._update_subject_session, repr=True)
-        self._register_field('test_basename', depends_on=[key for key in BIDS_ENTITY_KEYS if key not in ('subject', 'task')], slave_handler=self._update_test_basename, repr=True)
         self._register_field('rej', self._artifact_rejection.keys(), self._artifact_rejection_default, allow_empty=True)
 
         # cov
@@ -1166,7 +1193,7 @@ class Pipeline(FileTree):
         # evoked files are based on old events
         for subject, session, task, acquisition, run in invalid_cache['events']:
             for epoch, params in self._epochs.items():
-                if task not in params.sessions:
+                if task not in params.tasks:
                     continue
                 with self._temporary_state:
                     rm['evoked-file'].add({'subject': subject, 'session': session, 'task': task, 'acquisition': acquisition, 'run': run, 'epoch': epoch, 'suffix': self.get('suffix')})
@@ -3258,7 +3285,7 @@ class Pipeline(FileTree):
             (or group if ``group`` is specified).
         epoch
             Epoch to use for computing neighbor-correlation (by default, the
-            whole session is used).
+            whole task is used).
         add_bads
             Reject bad channels first.
         return_data
@@ -3286,8 +3313,8 @@ class Pipeline(FileTree):
             if epoch is True:
                 epoch = self.get('epoch')
             epoch_params = self._epochs[epoch]
-            if len(epoch_params.sessions) != 1:
-                raise ValueError(f"{epoch=}: epoch has multiple session")
+            if len(epoch_params.tasks) != 1:
+                raise ValueError(f"{epoch=}: epoch has multiple tasks")
             ds = self.load_epochs(add_bads=add_bads, epoch=epoch, reject=False, decim=1, **state)
             key = ds.info['sensor_types'][0]
             data = concatenate(ds[key])
@@ -3501,16 +3528,16 @@ class Pipeline(FileTree):
                 elif add_bads:
                     bad_channels = sorted(set.union(*(
                         set(self.load_bad_channels(task=task)) for
-                        task in epoch.sessions)))
+                        task in epoch.tasks)))
                 else:
                     bad_channels = []
                 # load events
-                for task in epoch.sessions:
+                for task in epoch.tasks:
                     self.set(task=task)
                     # load events for this task
                     task_dss = []
                     for sub_epoch in epoch.sub_epochs:
-                        if self._epochs[sub_epoch].session != task:
+                        if self._epochs[sub_epoch].task != task:
                             continue
                         ds = self.load_selected_events(subject, reject, add_bads, index, data_raw, epoch=sub_epoch)
                         ds[:, 'epoch'] = sub_epoch
@@ -3550,7 +3577,7 @@ class Pipeline(FileTree):
             dss = []
             with self._temporary_state:
                 if reject and rej_params['kind'] is not None:
-                    rej_file = self.get('rej-file', task=epoch.session)
+                    rej_file = self.get('rej-file', task=epoch.task)
                     if exists(rej_file):
                         ds_sel = load.unpickle(rej_file)
                     else:
@@ -3558,7 +3585,7 @@ class Pipeline(FileTree):
                         raise FileMissingError(f"The rejection file at {rej_file} does not exist. Run .make_epoch_selection() first.")
                 else:
                     ds_sel = None
-                ds = self.load_events(add_bads=add_bads, data_raw=data_raw, task=epoch.session)
+                ds = self.load_events(add_bads=add_bads, data_raw=data_raw, task=epoch.task)
 
             # primary event selection
             if epoch.sel:
@@ -4087,7 +4114,7 @@ class Pipeline(FileTree):
         --------
         make_bad_channels_auto : find bad channels automatically
         load_bad_channels : load the current bad_channels file
-        merge_bad_channels : merge bad channel definitions for all sessions
+        merge_bad_channels : merge bad channel definitions for all tasks
         """
         pipe = self._raw[self.get('raw', **kwargs)]
         pipe.make_bad_channels(self._bids_path, bad_chs, redo)
@@ -4130,7 +4157,7 @@ class Pipeline(FileTree):
             list of bad channels (e.g., 0.3).
         epoch
             Epoch to use for computing neighbor-correlation (by default, the
-            whole session is used).
+            whole task is used).
         add_bads
             Reject bad channels first.
         save
@@ -4366,16 +4393,16 @@ class Pipeline(FileTree):
             Load data from this :ref:`state-epoch` for visualization during
             component selection (does not affect the ICA components themselvs).
             If unspecified, the default is to load the data form the entire
-            :ref:`state-session` that the ICA is based on.
+            :ref:`state-task` that the ICA is based on.
         samplingrate
             Samplingrate in Hz for the visualization (set to a lower value to
             improve GUI performance; for raw data, the default is ~100 Hz, for
             epochs the default is the epoch setting).
         decim
             Data decimation factor (alternative to ``samplingrate``).
-        session
-            One or more sessions for which to plot the raw data (this parameter
-            can not be used together with ``epoch``; default is the session used
+        task
+            One or more tasks for which to plot the raw data (this parameter
+            can not be used together with ``epoch``; default is the task used
             for ICA estimation).
         ...
             State parameters.
@@ -4931,7 +4958,7 @@ class Pipeline(FileTree):
             else:
                 raise ValueError(f"The current epoch {epoch.name!r} is not a primary epoch and inherits selections from other epochs. Generate trial rejection for these epochs.")
 
-        path = self.get('rej-file', mkdir=True, task=epoch.session)
+        path = self.get('rej-file', mkdir=True, task=epoch.task)
 
         if auto is not None and overwrite is not True and exists(path):
             if overwrite is False:
@@ -5706,14 +5733,14 @@ class Pipeline(FileTree):
         return test_obj.make(y, ds, force_permutation, kwargs)
 
     def merge_bad_channels(self):
-        """Merge bad channel definitions for different sessions
+        """Merge bad channel definitions for different tasks
 
-        Load the bad channel definitions for all sessions of the current
-        subject and save the union for all sessions.
+        Load the bad channel definitions for all tasks of the current
+        subject and save the union for all tasks.
 
         See Also
         --------
-        make_bad_channels : set bad channels for a single session
+        make_bad_channels : set bad channels for a single task
         """
         n_chars = max(map(len, self._tasks))
         # collect bad channels
@@ -6154,7 +6181,7 @@ class Pipeline(FileTree):
         Sets the current directory to raw-dir, and sets the SUBJECT and
         SUBJECTS_DIR to current values
         """
-        subp.run_mne_analyze(self.get('raw_dir'), self.get('mrisubject'),
+        subp.run_mne_analyze(self.get('raw-dir'), self.get('mrisubject'),
                              self.get('mri-sdir'), modal)
 
     def run_mne_browse_raw(self, modal=False):
@@ -6170,7 +6197,7 @@ class Pipeline(FileTree):
         Sets the current directory to raw-dir, and sets the SUBJECT and
         SUBJECTS_DIR to current values
         """
-        subp.run_mne_browse_raw(self.get('raw_dir'), self.get('mrisubject'), self.get('mri-sdir'), modal)
+        subp.run_mne_browse_raw(self.get('raw-dir'), self.get('mrisubject'), self.get('mri-sdir'), modal)
 
     def set(self, subject=None, match=True, allow_asterisk=False, **state):
         """
@@ -6470,44 +6497,14 @@ class Pipeline(FileTree):
         epoch = fields['epoch']
         if epoch in self._epochs:
             epoch = self._epochs[epoch]
-            return epoch.sessions[0]
+            return epoch.tasks[0]
         elif not epoch or epoch == '*':
-            return  # don't force session
+            return  # don't force task
         return '*'  # if a named epoch is not in _epochs it might be a removed epoch
 
     def _update_src_name(self, fields):
         "Because 'ico-4' is treated in filenames  as ''"
         return '' if fields['src'] == 'ico-4' else fields['src']
-
-    def _update_raw_dir(self, fields: LayeredDict) -> str:
-        entities = {
-            k: v for k, v in fields.items()
-            if (k in BIDS_ENTITY_KEYS) and v and ('*' not in v)
-        }
-        bids_path = BIDSPath(root=self.root, **entities)
-        bids_path.find_matching_sidecar(on_error='ignore')
-        return str(bids_path.directory)
-
-    def _update_raw_basename(self, fields: LayeredDict) -> str:
-        entities = {
-            k: v for k, v in fields.items()
-            if (k in BIDS_ENTITY_KEYS) and v and ('*' not in v)
-        }
-        bids_path = BIDSPath(root=self.root, **entities)
-        bids_path.find_matching_sidecar(on_error='ignore')
-        return splitext(bids_path.basename)[0]
-
-    def _update_epoch_basename(self, fields: LayeredDict) -> str:
-        raw_basename = self._update_raw_basename(fields)
-        return remove_task(raw_basename)
-
-    def _update_subject_session(self, fields: LayeredDict) -> str:
-        raw_basename = self._update_raw_basename(fields)
-        return get_subject_session(raw_basename)
-
-    def _update_test_basename(self, fields: LayeredDict) -> str:
-        epoch_basename = self._update_epoch_basename(fields)
-        return remove_subject(epoch_basename)
 
     def _eval_parc(self, parc):
         if parc in self._parcs:
@@ -6731,9 +6728,9 @@ class Pipeline(FileTree):
         Parameters
         ----------
         tasks
-            By default, bad channels for the current session are shown. Set
+            By default, bad channels for the current task are shown. Set
             ``tasks`` to ``True`` to show bad channels for all tasks, or
-            a list of session names to show bad channeles for these tasks.
+            a list of task names to show bad channeles for these tasks.
         ...
             State parameters.
 
@@ -7112,7 +7109,7 @@ class Pipeline(FileTree):
         --------
         show_tree: show complete tree (including secondary, optional and cache)
         """
-        return self.show_tree(fields=['raw_dir', 'trans-file', 'mri-dir'])
+        return self.show_tree(fields=['raw-dir', 'trans-file', 'mri-dir'])
 
     def _surfer_plot_kwargs(self, surf=None, views=None, foreground=None, background=None, smoothing_steps=None, hemi=None):
         out = self._brain_plot_defaults.copy()
