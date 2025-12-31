@@ -62,7 +62,6 @@ from .test_def import (
     assemble_tests,
 )
 from .variable_def import GroupVar, Variables
-from . import preprocessing
 
 
 # current cache state version
@@ -76,13 +75,15 @@ CACHE_STATE_VERSION = 17
 #  15:  merge_triggers attribute, store in input_state
 #  16:  stim_channel attribute, store in input_state
 
-BIDS_ENTITY_KEYS = ['subject', 'session', 'task', 'acquisition', 'run', 'datatype', 'suffix', 'extension']
+BIDS_ENTITY_KEYS = ('subject', 'session', 'task', 'acquisition', 'run', 'split')
+BIDS_PATH_KEYS = ('datatype', 'suffix', 'extension', *BIDS_ENTITY_KEYS)
 BIDS_ENTITY_PREFIX_MAP = {
     'subject': 'sub',
     'session': 'ses',
     'task': 'task',
     'acquisition': 'acq',
     'run': 'run',
+    'split': 'split',
 }
 
 # paths
@@ -155,7 +156,7 @@ def guess_y(ds, default=None):
 def generate_bids_template(entities: set[str]) -> str:
     "Generate a BIDS filename template from entity names"
     parts = []
-    for name in ('subject', 'session', 'task', 'acquisition', 'run'):
+    for name in BIDS_ENTITY_KEYS:
         if name not in entities:
             continue
         prefix = BIDS_ENTITY_PREFIX_MAP[name]
@@ -385,6 +386,7 @@ class Pipeline(FileTree):
         ########
         if root is None:
             raise AttributeError("Pipeline subclasses must have root.")
+        self.root = root = FileTree._eval_root(root)
         if hasattr(self, 'cluster_criteria'):
             raise AttributeError("Pipeline subclasses can not have a .cluster_criteria attribute anymore. Please remove the attribute, delete the eelbrain-cache folder and use the select_clusters analysis parameter.")
         if not isinstance(self.auto_delete_cache, str):
@@ -398,7 +400,10 @@ class Pipeline(FileTree):
         self._tasks = tuple(get_entity_vals(root, 'task', **self.ignore_entities))
         self._acquisitions = tuple(get_entity_vals(root, 'acquisition', **self.ignore_entities))
         self._runs = tuple(get_entity_vals(root, 'run', **self.ignore_entities))
+        self._splits = tuple(get_entity_vals(root, 'split', **self.ignore_entities))
         if self.datatype is not None:
+            if self.datatype not in ('meg', 'eeg'):
+                raise DefinitionError(f"`datatype` must be 'meg' or 'eeg', not {self.datatype!r}.")
             self._datatype = self.datatype
         else:
             datatypes = tuple(mne_bids.get_datatypes(root))
@@ -423,6 +428,7 @@ class Pipeline(FileTree):
             'acquisition' if self._acquisitions else None,
             'task',
             'run' if self._runs else None,
+            'split' if self._splits else None,
         ]
         available_entities = {f for f in available_entities if f is not None}
 
@@ -434,10 +440,10 @@ class Pipeline(FileTree):
 
             # This templating approach to handle optional fields assumes that all
             # subjects have the same optional entities.
-            'raw_basename': generate_bids_template({'subject', 'session', 'acquisition', 'task', 'run'} & available_entities),
-            'epoch_basename': generate_bids_template({'subject', 'session', 'acquisition', 'run'} & available_entities),
+            'raw_basename': generate_bids_template({'subject', 'session', 'acquisition', 'task', 'run', 'split'} & available_entities),
+            'epoch_basename': generate_bids_template({'subject', 'session', 'acquisition', 'run', 'split'} & available_entities),
             'subject_session': generate_bids_template({'subject', 'session'} & available_entities),
-            'test_basename': generate_bids_template({'session', 'run'} & available_entities),
+            'test_basename': generate_bids_template({'session', 'run', 'split'} & available_entities),
 
             'raw-dir': join('{root}', 'sub-{subject}', 'ses-{session}' if self._sessions else '', '{datatype}'),
             'deriv-dir': join('{root}', 'derivatives'),
@@ -453,7 +459,7 @@ class Pipeline(FileTree):
 
             'cache-dir': join('{deriv-dir}', 'eelbrain', 'cache'),
             'raw-cache-dir': join('{cache-dir}', 'raw', '{subject_session}'),  # hard-coded in RawPipe
-            'cached-raw-file': join('raw-cache-dir', '{raw_basename}_raw-{raw}.fif'),
+            'cached-raw-file': join('{raw-cache-dir}', '{raw_basename}_raw-{raw}.fif'),
 
             'event-file': join('{raw-cache-dir}', '{raw_basename}_raw-{raw}_evts.pickle'),
             'interp-file': join('{raw-cache-dir}', '{raw_basename}_raw-{raw}_interp.pickle'),
@@ -533,7 +539,6 @@ class Pipeline(FileTree):
                 self._templates.update(cls._values)
 
         # register fields in templates
-        self.root = root = FileTree._eval_root(root)
         self._bids_path = BIDSPath(root=root)
         FileTree.__init__(self)
         self.set(root=root)
@@ -576,8 +581,8 @@ class Pipeline(FileTree):
         self._raw = assemble_pipeline(
             { 'raw': RawSource(), **self.raw },
             self._tasks,
-            self.get('cache-dir'),
-            self.get('deriv-dir'),
+            join(root, 'derivatives', 'eelbrain', 'cache', 'raw', self._templates['subject_session'], f'{self._templates['raw_basename']}_raw-{{raw}}.fif'),
+            join(root, 'derivatives', 'ica', f'{self._templates['epoch_basename']}_raw-{{raw}}_ica.fif'),
             log,
         )
         raw_pipe: RawSource = self._raw['raw']
@@ -649,14 +654,15 @@ class Pipeline(FileTree):
             default_epoch = None
         self._register_field('epoch', epoch_keys, default_epoch, repr=True)
 
-        # BIDS entities
+        # Register BIDS_PATH_KEYS
         self._register_field('subject', self._subjects, repr=True)
         self._register_field('session', self._sessions or None, repr=True)
         self._register_field('task', self._tasks, depends_on=('epoch',), slave_handler=self._update_task, repr=True)
         self._register_field('acquisition',  self._acquisitions or None, repr=True)
         self._register_field('run', self._runs or None, repr=True)
-        self._register_field('datatype', (self._datatype,), self._datatype, repr=True)
-        self._register_field('suffix', (self._datatype,), self._datatype, repr=True)
+        self._register_field('split', self._splits or None, repr=True)
+        self._register_field('datatype', (self._datatype,), repr=True)
+        self._register_field('suffix', (self._datatype,), repr=True)
         self._register_field('extension', extensions, repr=True)
 
         self._register_field('mri', sorted(self._mri_subjects), allow_empty=True)
@@ -747,15 +753,10 @@ class Pipeline(FileTree):
         input_state_file = join(cache_dir, 'input-state.pickle')
         if exists(input_state_file):
             input_state = load.unpickle(input_state_file)
-            if input_state['version'] < 10:
+            if input_state['version'] < CACHE_STATE_VERSION:
                 input_state = None
             elif input_state['version'] > CACHE_STATE_VERSION:
                 raise RuntimeError("You are trying to initialize an experiment with an older version of Eelbrain than that which wrote the cache. If you really need this, delete the eelbrain-cache folder and try again.")
-            else:
-                if input_state['version'] < 15:
-                    input_state['merge_triggers'] = None
-                if input_state['version'] < 16:
-                    input_state['stim_channel'] = None
         else:
             input_state = None
 
@@ -961,68 +962,6 @@ class Pipeline(FileTree):
     def _restore_state(self, state=-1, discard_tip=True):
         FileTree._restore_state(self, state=state, discard_tip=discard_tip)
         self._update_bids_path()
-
-    def _state_backwards_compat(self, cache_state_v, new_state, cache_state):
-        "Update state dicts for backwards-compatible comparison"
-        # epochs
-        if cache_state_v < 3:
-            # Epochs represented as dict up to Eelbrain 0.24
-            new_state['epochs'] = {k: v._as_dict_24() for k, v in self._epochs.items()}
-            for e in cache_state['epochs'].values():
-                e.pop('base', None)
-                if 'sel_epoch' in e:
-                    e.pop('n_cases', None)
-        elif cache_state_v < 11:
-            # remove samplingrate parameter
-            new_state['epochs'] = {k: {ki: vi for ki, vi in v.items() if ki != 'samplingrate'} for k, v in new_state['epochs'].items()}
-
-        # events did not include session
-        if cache_state_v < 4:
-            session = self._sessions[0]
-            cache_state['events'] = {(subject, session): v for subject, v in cache_state['events'].items()}
-
-        # raw pipeline
-        if cache_state_v < 5:
-            legacy_raw = assemble_pipeline(LEGACY_RAW, '', '', '', '', self._sessions, self._log)
-            cache_state['raw'] = {k: v._as_dict() for k, v in legacy_raw.items()}
-
-        # parcellations represented as dicts
-        if cache_state_v < 6:
-            for params in cache_state['parcs'].values():
-                for key in ('morph_from_fsaverage', 'make'):
-                    if key in params:
-                        del params[key]
-
-        # tests represented as dicts
-        if cache_state_v < 7:
-            for params in cache_state['tests'].values():
-                if 'desc' in params:
-                    del params['desc']
-            cache_state['tests'] = {k: v._as_dict() for k, v in assemble_tests(cache_state['tests']).items()}
-        elif cache_state_v == 7:  # 'kind' key missing
-            for name, params in cache_state['tests'].items():
-                if name in new_state['tests']:
-                    params['kind'] = new_state['tests'][name]['kind']
-        if cache_state_v < 12:  # 'vars' entry added to all
-            for test, params in cache_state['tests'].items():
-                if 'vars' in params:
-                    try:
-                        params['vars'] = Variables(params['vars'])
-                    except Exception:
-                        self._log.warning("  Test %s: Defective vardef %r", test, params['vars'])
-                        params['vars'] = None
-                else:
-                    params['vars'] = None
-
-        # normalize raw dict
-        preprocessing.normalize_dict(cache_state['raw'])
-
-    @staticmethod
-    def _migrate_cache(cache_state_v, cache_dir):
-        "Modify cache structure"
-        if cache_state_v < 14:
-            from .migration import squeeze_spaces_in_paths
-            squeeze_spaces_in_paths(cache_dir)
 
     def _check_cache(self, new_state, cache_state, root):
         invalid_cache = defaultdict(set)
@@ -2126,16 +2065,6 @@ class Pipeline(FileTree):
                     dss.append(ds)
             return combine(dss)
 
-        # TODO: add_bads can't be str by type annotation
-        if isinstance(add_bads, str):
-            if add_bads == 'info':
-                add_bads_to_info = True
-                add_bads = True
-            else:
-                raise ValueError(f"{add_bads=}")
-        else:
-            add_bads_to_info = False
-
         with self._temporary_state:
             ds = self.load_selected_events(add_bads=add_bads, reject=reject, data_raw=True, vardef=vardef, cat=cat)
             if ds.n_cases == 0:
@@ -2258,7 +2187,6 @@ class Pipeline(FileTree):
         if ndvar:
             ds.info['sensor_types'] = sensor_types
             pipe = self._raw[self.get('raw')]
-            exclude = () if add_bads_to_info else 'bads'
             for data_kind in sensor_types:
                 sysname = pipe.get_sysname(info, ds.info['subject'], data_kind)
                 adjacency = pipe.get_adjacency(data_kind)
@@ -2267,13 +2195,11 @@ class Pipeline(FileTree):
                 else:
                     name = data_kind
                 if variable_tmax:
-                    ys = [load.mne.epochs_ndvar(e, data=data_kind, sysname=sysname, adjacency=adjacency, exclude=exclude, name=data_kind)[0] for e in ds['epochs']]
+                    ys = [load.mne.epochs_ndvar(e, data=data_kind, sysname=sysname, adjacency=adjacency, name=data_kind)[0] for e in ds['epochs']]
                     if isinstance(data.sensor, str):
                         ys = [getattr(y, data.sensor)('sensor') for y in ys]
                 else:
-                    ys = load.mne.epochs_ndvar(ds['epochs'], data=data_kind, sysname=sysname, adjacency=adjacency, exclude=exclude)
-                    if add_bads_to_info:
-                        ys.info[BAD_CHANNELS] = ds['epochs'].info['bads']
+                    ys = load.mne.epochs_ndvar(ds['epochs'], data=data_kind, sysname=sysname, adjacency=adjacency)
                     if isinstance(data.sensor, str):
                         ys = getattr(ys, data.sensor)('sensor')
                 ds[name] = ys
@@ -2405,7 +2331,7 @@ class Pipeline(FileTree):
             sns_ndvar = 'both'
             del_epochs = False
         else:
-            raise ValueError(f'keep_epochs={keep_epochs!r}')
+            raise ValueError(f'{keep_epochs=}')
 
         ds = self.load_epochs(subject, baseline, sns_ndvar, reject=reject, cat=cat, samplingrate=samplingrate, decim=decim, pad=pad, data_raw=data_raw, vardef=vardef)
 
@@ -2488,8 +2414,9 @@ class Pipeline(FileTree):
 
         """
         evt_file = self.get('event-file', mkdir=True, subject=subject, **kwargs)
-        subject = self.get('subject')
-        session = self.get('session')
+        entities = {k: self.get(k) for k in BIDS_ENTITY_KEYS}
+        subject = entities['subject']
+        session = entities['session']
 
         # search for and check cached version
         ds = None
@@ -2521,11 +2448,7 @@ class Pipeline(FileTree):
         elif data_raw:
             ds.info['raw'] = self.load_raw(add_bads, preload=self.preload)
 
-        ds.info['subject'] = subject
-        ds.info['session'] = session
-        ds.info['task'] = self.get('task')
-        ds.info['acquisition'] = self.get('acquisition')
-        ds.info['run'] = self.get('run')
+        ds.info.update(entities)
 
         if self.trigger_shift:
             if isinstance(self.trigger_shift, dict):
@@ -2765,7 +2688,7 @@ class Pipeline(FileTree):
         name = 'srcm' if 'srcm' in ds else 'src'
 
         # apply morlet transformation
-        freq_params = self.freqs[self.get('freq')]
+        freq_params = self._freqs[self.get('freq')]
         freq_range = freq_params['frequencies']
         ds['stf'] = cwt_morlet(ds[name], freq_range, use_fft=True, n_cycles=freq_params['n_cycles'], zero_mean=False, out='magnitude')
 
@@ -3576,7 +3499,6 @@ class Pipeline(FileTree):
         else:
             rej_params = self._artifact_rejection[self.get('rej')]
             # load files
-            dss = []
             with self._temporary_state:
                 if reject and rej_params['kind'] is not None:
                     rej_file = self.get('rej-file', task=epoch.task)
@@ -4119,7 +4041,7 @@ class Pipeline(FileTree):
         merge_bad_channels : merge bad channel definitions for all tasks
         """
         pipe = self._raw[self.get('raw', **kwargs)]
-        pipe.make_bad_channels(self._bids_path, bad_chs, redo)
+        pipe.make_bad_channels(self._bids_path, bad_chs, override=redo)
 
     def make_bad_channels_auto(self, flat=None, redo=False, **state):
         """Automatically detect bad channels
@@ -4139,7 +4061,7 @@ class Pipeline(FileTree):
         if state:
             self.set(**state)
         pipe = self._raw['raw']
-        pipe.make_bad_channels_auto(self._bids_path, flat, redo)
+        pipe.make_bad_channels_auto(self._bids_path, flat, override=redo)
 
     def make_bad_channels_neighbor_correlation(
             self,
@@ -4430,7 +4352,7 @@ class Pipeline(FileTree):
             if epoch is None:
                 if task is None:
                     task = pipe.task
-                raw = pipe.load_concatenated_source_raw(self._bids_path, task, list(self._runs) if self._runs else [])
+                raw = pipe.load_concatenated_source_raw(self._bids_path, task, self._runs)
                 decim = decim_param(samplingrate, decim, None, raw.info, minimal=True)
                 info = raw.info
                 display_data = raw
@@ -4481,7 +4403,7 @@ class Pipeline(FileTree):
 
         """
         pipe = self._get_ica_pipe(state)
-        return pipe.make_ica(self._bids_path, list(self._runs) if self._runs else [])
+        return pipe.make_ica(self._bids_path, self._runs)
 
     def make_link(self, temp, field, src, dst, redo=False):
         """Make a hard link
@@ -5753,7 +5675,7 @@ class Pipeline(FileTree):
             # be performed lower in the hierarchy
             self.set(raw='raw')
             for task in self.iter('task'):
-                if exists(self._raw['raw'].get_path(self._bids_path)):
+                if exists(self._raw['raw']._raw_path(self._bids_path)):
                     bads.update(self.load_bad_channels())
                     tasks.append(task)
                 else:
@@ -7136,8 +7058,8 @@ class Pipeline(FileTree):
         return out
 
     def _update_bids_path(self):
-        entities = {
+        keys = {
             k: v for k, v in self._fields.items()
-            if (k in BIDS_ENTITY_KEYS) and v and ('*' not in v)
+            if (k in BIDS_PATH_KEYS) and v and ('*' not in v)
         }
-        self._bids_path.update(**entities)
+        self._bids_path.update(**keys)
