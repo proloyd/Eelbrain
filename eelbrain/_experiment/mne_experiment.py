@@ -2813,7 +2813,7 @@ class Pipeline(FileTree):
 
         # preload morph matrices
         morph_sources = {subject.removeprefix('sub-') for subject in from_subjects.values() if subject != common_brain}
-        source_morphs = {subject: self.load_source_morph(subject=subject) for subject in morph_sources}
+        source_morphs = {'sub-' + subject: self.load_source_morph(subject=subject) for subject in morph_sources}
 
         # convert evoked objects
         method, make_kw, apply_kw = self._inv_params()
