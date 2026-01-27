@@ -4049,7 +4049,7 @@ class Pipeline(FileTree):
         merge_bad_channels : merge bad channel definitions for all tasks
         """
         pipe = self._raw[self.get('raw', **kwargs)]
-        pipe.make_bad_channels(self._bids_path, bad_chs, override=redo)
+        pipe.make_bad_channels(self._bids_path, bad_chs, redo=redo)
 
     def make_bad_channels_auto(self, flat=None, redo=False, **state):
         """Automatically detect bad channels
@@ -4069,7 +4069,7 @@ class Pipeline(FileTree):
         if state:
             self.set(**state)
         pipe = self._raw['raw']
-        pipe.make_bad_channels_auto(self._bids_path, flat, override=redo)
+        pipe.make_bad_channels_auto(self._bids_path, flat, redo=redo)
 
     def make_bad_channels_neighbor_correlation(
             self,

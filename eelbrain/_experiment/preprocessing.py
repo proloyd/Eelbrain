@@ -125,7 +125,7 @@ class RawPipe:
             self,
             path: BIDSPath,
             bad_chs: Union[Tuple[str], str, int],
-            override: bool,
+            redo: bool,
     ) -> None:
         raise NotImplementedError
 
@@ -133,7 +133,7 @@ class RawPipe:
             self,
             path: BIDSPath,
             flat: float,
-            override: bool,
+            redo: bool,
     ) -> None:
         raise NotImplementedError
 
@@ -277,8 +277,10 @@ class RawSource(RawPipe):
         bads_path = self._bads_path(path)
         if exists(bads_path):
             channels_df = pd.read_csv(bads_path, sep='\t')
-            if not {'name', 'status'}.issubset(channels_df.columns.tolist()):
-                raise RuntimeError(f"channels.tsv file at {bads_path} is missing required column 'name' or 'status'. Please delete the file and regenerate it.")
+            if 'status' not in channels_df.columns:
+                return []
+            elif 'name' not in channels_df.columns:
+                raise RuntimeError(f"channels.tsv file at {bads_path} is missing required column 'name'. Please regenerate the file.")
             return channels_df.query('status == "bad"')['name'].tolist()
         # create channels file
         self.log.info("No channels.tsv found for %s, creating an empty one.", path.fpath)
@@ -300,7 +302,7 @@ class RawSource(RawPipe):
             self,
             path: BIDSPath,
             bad_chs: Union[Tuple[str], str, int],
-            override: bool,
+            redo: bool,
     ) -> None:
         # check input list
         if isinstance(bad_chs, (str, int)):
@@ -310,22 +312,23 @@ class RawSource(RawPipe):
         new_bads = sensor._normalize_sensor_names(bad_chs)
         # merge with old bads
         old_bads = self.load_bad_channels(path)
-        if old_bads is not None and not override:
+        if old_bads is not None and not redo:
             new_bads = sorted(set(old_bads).union(new_bads))
         # print change
         print(f"{old_bads} -> {new_bads}")
         if new_bads == old_bads:
             return
         # write new bad channels
-        if override:
+        if redo:
             mark_channels(path, ch_names='all', status='good', verbose=MNE_VERBOSITY)
-        mark_channels(path, ch_names=new_bads, status='bad', verbose=MNE_VERBOSITY)
+        if len(new_bads):
+            mark_channels(path, ch_names=new_bads, status='bad', verbose=MNE_VERBOSITY)
 
     def make_bad_channels_auto(
             self,
             path: BIDSPath,
             flat: float = None,
-            override: bool = False,
+            redo: bool = False,
     ) -> None:
         if flat is None:
             if path.datatype == 'meg':
@@ -341,7 +344,7 @@ class RawSource(RawPipe):
         sysname = self.get_sysname(raw.info, path.subject, None)
         raw = load.mne.raw_ndvar(raw, sysname=sysname, adjacency=self.adjacency)
         bad_chs.extend(raw.sensor.names[raw.std('time') < flat])
-        self.make_bad_channels(path, bad_chs, override)
+        self.make_bad_channels(path, bad_chs, redo)
 
     def _as_dict(self, args: Sequence[str] = ()) -> dict:
         out = RawPipe._as_dict(self, args)
@@ -488,9 +491,9 @@ class CachedRawPipe(RawPipe):
             self,
             path: BIDSPath,
             bad_chs: Union[Tuple[str], str, int],
-            override: bool,
+            redo: bool,
     ) -> None:
-        self.source.make_bad_channels(path, bad_chs, override)
+        self.source.make_bad_channels(path, bad_chs, redo)
 
     def make_bad_channels_auto(self, *args, **kwargs) -> None:
         self.source.make_bad_channels_auto(*args, **kwargs)
