@@ -85,12 +85,13 @@ The steps below outline the recommended workflow.
 
 1. **Create a Fork** of `Eelbrain <https://github.com/Eelbrain/Eelbrain>`_.
 2. **Create a Branch**: Create a new branch from ``main`` for each feature or fix.
-3. **Commit Changes**: Make your changes and commit them.
-4. **Test Locally**:
+3. **Commit Changes**: Make your changes and commit them. Individual commit messages are squashed together during merge, therefore it is useful to have good descriptions in the commit messages that apply to the PR as a whole. Less useful commit messages (eg. "fix CI" when CI is not broken before PR) will be removed during merge. 
+4. **Dependency changes**: Any changes to the dependencies should be updated in the ``env-dev.yml``, ``pyproject.toml`` and ``env-readthedocs.yml`` file. 
+5. **Test Locally**:
    Add tests for new features and bug fixes to ensure code quality and prevent regressions.
    Run existing tests to make sure nothing breaks (see :ref:`dev-testing`).
-5. **Push to Your Fork**: Push your branch to your fork on GitHub.
-6. **Open a Pull Request (PR)**:
+6. **Push to Your Fork**: Push your branch to your fork on GitHub.
+7. **Open a Pull Request (PR)**:
 
    - **Use Draft Mode**: `Draft mode <https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/about-pull-requests#draft-pull-requests>`_
      allows you to make sure all checks pass before inviting feedback.
@@ -105,7 +106,7 @@ The steps below outline the recommended workflow.
    - **Ready for Review**: Switch the PR status to "Ready for Review" when the implementation is complete and all checks pass.
      Invite reviews from specific contributors (only if they are specifically relevant or have previously agreed to review this PR).
 
-7. **Code Review**: The code review process is a collaborative effort to improve code quality.
+8. **Code Review**: The code review process is a collaborative effort to improve code quality.
 
    - Apply feedback globally; if a reviewer notes an issue in one file, check if it exists elsewhere in your changes.
    - When you have addressed all reviewer comments and checks are passing, signal that the PR is ready for another review by
