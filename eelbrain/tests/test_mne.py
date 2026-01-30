@@ -269,6 +269,41 @@ def test_morphing():
 
 
 @requires_mne_sample_data
+def test_morphing_volume():
+    data_path = mne.datasets.sample.data_path()
+    subjects_dir = data_path / 'subjects'
+
+    data = datasets.get_mne_sample(src='vol', stc=True)  # vol-10
+    stc_vol = data[0, 'stc']
+    stc_ndvar = data[0, 'src']
+
+    # Prepare SourceMorph
+    fname_src_fsaverage = Path(subjects_dir) / "fsaverage" / "bem" / "fsaverage-vol-7-src.fif"
+    if fname_src_fsaverage.exists():
+        src_fsaverage = mne.read_source_spaces(fname_src_fsaverage)
+    else:
+        src_fsaverage = mne.setup_volume_source_space('fsaverage', 7, subjects_dir=subjects_dir)
+        src_fsaverage.save(fname_src_fsaverage)
+    src_from = stc_ndvar.source.get_source_space()
+    morph = mne.compute_source_morph(
+        src_from, 'sample', 'fsaverage', subjects_dir,
+        niter_affine=[10, 10, 5],
+        niter_sdr=[10, 10, 5],  # just for speed
+        src_to=src_fsaverage,
+    )
+    stc_vol_m = morph.apply(stc_vol)
+    target = load.mne.stc_ndvar(stc_vol_m, 'fsaverage', 'vol-7', subjects_dir, 'dSPM', name='src')
+
+    # Apply to NDVar
+    stc_ndvar_m = morph_source_space(stc_ndvar, morph=morph)
+    assert_dataobj_equal(stc_ndvar_m, target)
+
+    # Apply to NDVar with case
+    stc_ndvar_m = morph_source_space(data[:2, 'src'], morph=morph)
+    assert_dataobj_equal(stc_ndvar_m[0], target)
+
+
+@requires_mne_sample_data
 def test_xhemi():
     y = datasets.get_mne_stc(ndvar=True)
     data_dir = mne.datasets.sample.data_path()

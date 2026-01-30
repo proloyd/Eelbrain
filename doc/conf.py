@@ -13,11 +13,9 @@ from datetime import datetime
 from itertools import chain
 import os
 from pathlib import Path
-from warnings import filterwarnings
 
 import eelbrain.plot._brain_object  # make sure that Brain is available
 import eelbrain
-import mne
 from sphinx_gallery.sorting import ExplicitOrder, _SortKey
 
 
@@ -93,6 +91,7 @@ example_order = {
         'sensor-lm.py',
         'sensor-two-stage.py',
         'compare-topographies.py',
+        'volume-source-space.py',
     ],
     'plots': [
         'boxplot.py',
@@ -134,8 +133,9 @@ sphinx_gallery_conf = {
     'reference_url': {'eelbrain': None},
 }
 
-# download datasets (to avoid progress bar output in example gallery)
-root = mne.datasets.mtrf.data_path()
+# Disable tqdm (to avoid progress bar output in example gallery)
+os.environ['TQDM_DISABLE'] = '1'
+os.environ['MNE_TQDM'] = 'off'
 
 ################################################################################
 # Bibliography
@@ -246,6 +246,7 @@ intersphinx_mapping = {
     'pandas': ('https://pandas.pydata.org/docs', None),
     'rpy2': ('https://rpy2.github.io/doc', None),
     'scipy': ('https://docs.scipy.org/doc/scipy', None),
+    'sphinx': ('https://www.sphinx-doc.org/en/master/', None),
     'surfer': ('https://pysurfer.github.io', None),
 }
 # http://sphinx.pocoo.org/ext/intersphinx.html

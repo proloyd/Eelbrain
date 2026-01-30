@@ -1016,7 +1016,8 @@ def raw_ndvar(
         Set the time axis of each :class:`NDVar` in the output to begin at 0.
         By default, the NDVars wll retain time information from the raw data.
     data
-        The kind of data to include (default based on data).
+        The kind of data to include (e.g., ``"meg"``; see :func:`mne.pick_types`).
+        By default, guess based on the data in ``raw``.
     exclude
         Channels to exclude (:func:`mne.pick_types` kwarg).
         If 'bads' (default), exclude channels in info['bads'].
@@ -1577,11 +1578,10 @@ def ndvar_stc(
             stc = mne.SourceEstimate(data, source_dim.vertices, tmin, tstep, source_dim.subject)
     elif isinstance(source_dim, VolumeSourceSpace):
         assert len(source_dim.vertices) == 1
-        vertices = source_dim.vertices[0]
         if is_vector_stc:
-            stc = mne.VolVectorSourceEstimate(data, vertices, tmin, tstep, source_dim.subject)
+            stc = mne.VolVectorSourceEstimate(data, source_dim.vertices, tmin, tstep, source_dim.subject)
         else:
-            stc = mne.VolSourceEstimate(data, vertices, tmin, tstep, source_dim.subject)
+            stc = mne.VolSourceEstimate(data, source_dim.vertices, tmin, tstep, source_dim.subject)
     return stc, target_shape, dims[1:], case_axis
 
 
