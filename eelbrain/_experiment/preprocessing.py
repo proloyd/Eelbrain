@@ -31,7 +31,7 @@ from .._text import enumeration
 from .._utils import ask, deprecate_kwarg, user_activity
 from ..mne_fixes import CaptureLog
 from ..mne_fixes._version import MNE_VERSION, V0_19, V0_24
-from .definitions import log_dict_change, tuple_arg, typed_arg
+from .definitions import log_dict_change, sequence_arg, typed_arg
 from .exceptions import FileMissingError
 
 MNE_VERBOSITY = 'WARNING'
@@ -737,7 +737,7 @@ class RawICA(CachedRawPipe):
             **kwargs,
     ):
         CachedRawPipe.__init__(self, source, cache)
-        self.task = tuple_arg('task', task, allow_none=False)
+        self.task = sequence_arg('task', task, allow_none=False)
         self.kwargs = {'method': method, 'random_state': random_state, **kwargs}
         self.fit_kwargs = dict(fit_kwargs) if fit_kwargs else {}
 
@@ -1119,10 +1119,10 @@ class RawReReference(CachedRawPipe):
     ):
         CachedRawPipe.__init__(self, source, cache)
         if not isinstance(reference, str):
-            reference = tuple_arg('reference', reference, allow_none=False)
+            reference = sequence_arg('reference', reference, allow_none=False, sequence_type=list)
         self.reference = reference
-        self.add = tuple_arg('add', add)
-        self.drop = tuple_arg('drop', drop)
+        self.add = sequence_arg('add', add, sequence_type=list)
+        self.drop = sequence_arg('drop', drop, sequence_type=list)
 
     def _make(
             self,
@@ -1133,14 +1133,14 @@ class RawReReference(CachedRawPipe):
         if self.add:
             with warnings.catch_warnings():
                 warnings.filterwarnings('ignore', 'The locations of multiple reference channels are ignored', module='mne')
-                raw = mne.add_reference_channels(raw, [*self.add], copy=False)
+                raw = mne.add_reference_channels(raw, self.add, copy=False)
             # apply new channel position
             pipe = self.source
             while not isinstance(pipe, RawSource):
                 pipe = pipe.source
             if pipe.montage:
                 raw.set_montage(pipe.montage)
-        raw.set_eeg_reference([*self.reference])
+        raw.set_eeg_reference(self.reference)
         if self.drop:
             raw = raw.drop_channels(self.drop)
         return raw
@@ -1162,10 +1162,10 @@ class RawReReference(CachedRawPipe):
     @staticmethod
     def _normalize_dict(state: dict) -> None:
         if not isinstance(state['reference'], str):
-            state['reference'] = tuple_arg('reference', state['reference'])
+            state['reference'] = sequence_arg('reference', state['reference'])
         for key in ['add', 'drop']:
             if key in state:
-                state[key] = tuple_arg(key, state[key])
+                state[key] = sequence_arg(key, state[key])
 
 
 def assemble_pipeline(
