@@ -528,7 +528,7 @@ class TreeModel:
         iter_fields = []
         for field in fields:
             for terminal_field in self.find_keys(field):
-                if terminal_field in constants or terminal_field in iter_fields:
+                if (terminal_field in constants) or (terminal_field in iter_fields) or (terminal_field not in self._field_values):
                     continue
                 iter_fields.append(terminal_field)
 
@@ -588,7 +588,7 @@ class TreeModel:
         Parameters
         ----------
         temp : str
-            Name of a template in the MneExperiment.templates dictionary, or
+            Name of a template in the Pipeline.templates dictionary, or
             a path template with variables indicated as in ``'{var_name}'``
         """
         # if the name is an existing template, retrieve it
@@ -641,7 +641,7 @@ class TreeModel:
     def reset(self):
         """Reset all field values to the state at initialization
 
-        This function can be used in cases where the same MneExperiment instance
+        This function can be used in cases where the same Pipeline instance
         is used to perform multiple independent operations, where parameters set
         during one operation should not affect the next operation.
         """
