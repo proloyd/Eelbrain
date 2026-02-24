@@ -233,7 +233,10 @@ class Pipeline(FileTree):
     # hard drive space ~ 100 mb/file
     check_raw_mtime: bool = True  # check raw input files' mtime for change
 
+    # datatype and extension are usually inferred from a BIDS dataset; override here if needed
     datatype: str = None
+    extension: str = None
+
     ignore_entities: dict[str, list[str]] = {}
     preload: bool = False
 
@@ -412,7 +415,10 @@ class Pipeline(FileTree):
         if self.datatype is not None:
             if self.datatype not in ('meg', 'eeg'):
                 raise DefinitionError(f"`datatype` must be 'meg' or 'eeg', not {self.datatype!r}.")
+            if not isinstance(self.extension, str):
+                raise TypeError(f"{self.__class__.__name__}.extension={self.extension!r} with {self.__class__.__name__}.datatype={self.datatype!r}; extension needs to be specified (e.g., '.fif').")
             self._datatype = self.datatype
+            extensions = (self.extension,)
         else:
             datatypes = tuple(mne_bids.get_datatypes(root))
             if 'meg' in datatypes and 'eeg' in datatypes:
@@ -4837,24 +4843,6 @@ class Pipeline(FileTree):
         return self.get('res-deep-file', mkdir=True, analysis='Source Labels',
                         folder="{parc} {mrisubject} %s" % surf, resname=label,
                         ext='png')
-
-    def make_raw(self, **kwargs):
-        """Make a raw file
-
-        Parameters
-        ----------
-        ...
-            State parameters.
-
-        Notes
-        -----
-        Due to the electronics of the KIT system sensors, signal lower than
-        0.16 Hz is not recorded even when recording at DC.
-        """
-        if kwargs:
-            self.set(**kwargs)
-        pipe = self._raw[self.get('raw')]
-        pipe.cache(self._bids_path)
 
     def make_epoch_selection(
             self,
