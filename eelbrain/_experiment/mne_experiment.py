@@ -92,7 +92,7 @@ LOG_FILE = join('{root}', 'derivatives', 'eelbrain', 'eelbrain {name}.log')
 LOG_FILE_OLD = join('{root}', '.eelbrain.log')
 
 # Allowable parameters
-COV_PARAMS = {'epoch', 'session', 'method', 'reg', 'keep_sample_mean', 'reg_eval_win_pad'}
+COV_PARAMS = {'epoch', 'method', 'reg', 'keep_sample_mean', 'reg_eval_win_pad'}
 INV_METHODS = ('MNE', 'dSPM', 'sLORETA', 'eLORETA', 'champ')
 SRC_RE = re.compile(r'^(ico|vol)-(\d+)(?:-(cortex|brainstem))?$')
 inv_re = re.compile(r"^(free|fixed|loose\.\d+|vec)"  # orientation constraint
@@ -306,7 +306,7 @@ class Pipeline(FileTree):
         'bestreg': EpochCovariance('cov', 'best'),
         'reg': EpochCovariance('cov', 'diagonal_fixed'),
         'noreg': EpochCovariance('cov', 'empirical'),
-        'emptyroom': RawCovariance('emptyroom'),
+        'emptyroom': RawCovariance(),
         'ad_hoc': RawCovariance(method='ad_hoc'),
     }
 
@@ -408,6 +408,7 @@ class Pipeline(FileTree):
         self._acquisitions = tuple(get_entity_vals(root, 'acquisition', **ignore_entities))
         self._runs = tuple(get_entity_vals(root, 'run', **ignore_entities))
         self._splits = tuple(get_entity_vals(root, 'split', **ignore_entities))
+
         if self.datatype is not None:
             if self.datatype not in ('meg', 'eeg'):
                 raise DefinitionError(f"`datatype` must be 'meg' or 'eeg', not {self.datatype!r}.")
@@ -619,13 +620,6 @@ class Pipeline(FileTree):
                 raise ValueError(f"kind={params['kind']!r} in artifact_rejection {name!r}")
         self._artifact_rejection = artifact_rejection
 
-        # noise covariance
-        for key, cov in self._covs.items():
-            cov.key = key
-            if isinstance(cov, RawCovariance) and cov.session is None:
-                # TODO: change `cov.session`
-                cov.session = self._tasks[0]
-
         # parcellations
         # make : can be made if non-existent
         # morph_from_fraverage : can be morphed from fsaverage to other subjects
@@ -797,11 +791,14 @@ class Pipeline(FileTree):
             # subjects_with_raw_changes = set()
             for subject, session, task, acquisition, run in self.iter(('subject', 'session', 'task', 'acquisition', 'run'), group='all', raw='raw'):
                 key = (subject, session, task, acquisition, run)
-                if not self._bids_path.fpath.exists():
+                raw_path = self._bids_path.fpath
+
+                if not raw_path.exists():
                     raw_missing.add(key)
                     if self.check_raw_mtime:
-                        log.debug("Raw file missing: %s", self._bids_path.fpath)
+                        log.debug("Raw file missing: %s", raw_path)
                     continue
+
                 # events
                 events[key] = events_in = self.load_events(add_bads=False, data_raw=False)
                 self._raw_samplingrate[key] = events_in.info['sfreq']
@@ -1275,8 +1272,8 @@ class Pipeline(FileTree):
                 self.set(epoch=cov.epoch)
                 return self._epochs_mtime()
             elif isinstance(cov, RawCovariance):
-                self.set(task=cov.session)
-                return self._raw_mtime()
+                pipe = self._raw[self.get('raw')]
+                return pipe.mtime(self._bids_path, bad_chs=True, noise=True)
             else:
                 raise TypeError(f"{cov=}")
 
@@ -1879,21 +1876,24 @@ class Pipeline(FileTree):
         self.make_annot(**state)
         return mne.read_labels_from_annot(self.get('mrisubject'), self.get('parc'), 'both', subjects_dir=self.get('mri-sdir'))
 
-    def load_bad_channels(self, **kwargs):
+    def load_bad_channels(self, noise: bool = False, **kwargs):
         """Load bad channels
 
         Parameters
         ----------
+        noise
+            Load bad channels for empty-room noise recording instead of the subject recording.
         ...
             State parameters.
 
         Returns
         -------
         bad_chs : list of str
-            Bad chnnels.
+            Bad channels.
         """
         pipe = self._raw[self.get('raw', **kwargs)]
-        return pipe.load_bad_channels(self._bids_path)
+        bids_path = self._bids_path
+        return pipe.load_bad_channels(bids_path, noise=noise)
 
     def _load_bem(self):
         subject = self.get('mrisubject')
@@ -3276,6 +3276,7 @@ class Pipeline(FileTree):
             decim: int = None,
             tstart: float = None,
             tstop: float = None,
+            noise: bool = False,
             **kwargs,
     ) -> Union[mne.io.Raw, NDVar]:
         """
@@ -3301,13 +3302,16 @@ class Pipeline(FileTree):
             the ``tstart`` will be set to ``t = 0``.
         tstop
             Crop the raw data.
+        noise
+            Load corresponding empty-room data instead of current subject's task data (default ``False``).
         ...
             Applicable :ref:`state-parameters`:
 
              - :ref:`state-raw`: preprocessing pipeline
         """
         pipe = self._raw[self.get('raw', **kwargs)]
-        raw = pipe.load(self._bids_path, add_bads)
+        bids_path = self._bids_path
+        raw = pipe.load(bids_path, add_bads, noise=noise)
         if decim and decim > 1:
             assert samplingrate is None, "samplingrate and decim can't both be specified"
             samplingrate = int(round(raw.info['sfreq'] / decim))
@@ -4040,7 +4044,13 @@ class Pipeline(FileTree):
         labels = parc_def._make(self, parc)
         write_labels_to_annot(labels, mrisubject, parc, True, self.get('mri-sdir'))
 
-    def make_bad_channels(self, bad_chs=(), redo=False, **kwargs):
+    def make_bad_channels(
+        self,
+        bad_chs: Union[Tuple[str], str, int] = (),
+        redo: bool = False,
+        noise: bool = False,
+        **kwargs: Any,
+    ) -> None:
         """Write the bad channel definition file for a raw file
 
         If the file already exists, new bad channels are added to the old ones.
@@ -4049,12 +4059,14 @@ class Pipeline(FileTree):
 
         Parameters
         ----------
-        bad_chs : iterator of str
+        bad_chs
             Names of the channels to set as bad. Numerical entries are
             interpreted as "MEG XXX". If bad_chs contains entries not present
             in the raw data, a ValueError is raised.
-        redo : bool
+        redo
             If the file already exists, replace it (instead of adding).
+        noise
+            If True, make bad channels for the empty-room recording instead of the current subject's recording.
         ...
             State parameters.
 
@@ -4065,27 +4077,37 @@ class Pipeline(FileTree):
         merge_bad_channels : merge bad channel definitions for all tasks
         """
         pipe = self._raw[self.get('raw', **kwargs)]
-        pipe.make_bad_channels(self._bids_path, bad_chs, redo=redo)
+        bids_path = self._bids_path
+        pipe.make_bad_channels(bids_path, bad_chs, redo=redo, noise=noise)
 
-    def make_bad_channels_auto(self, flat=None, redo=False, **state):
+    def make_bad_channels_auto(
+        self,
+        flat: float = None,
+        redo: bool = False,
+        noise: bool = False,
+        **state: Any,
+    ) -> None:
         """Automatically detect bad channels
 
         Works on ``raw='raw'``
 
         Parameters
         ----------
-        flat : scalar
+        flat
             Threshold for detecting flat channels: channels with ``std < flat``
             are considered bad (default 1e-14 for MEG and 0 for EEG).
-        redo : bool
+        redo
             If the file already exists, replace it (instead of adding).
+        noise
+            If True, make bad channels for the empty-room recording instead of the current subject's recording.
         ...
             State parameters.
         """
         if state:
             self.set(**state)
         pipe = self._raw['raw']
-        pipe.make_bad_channels_auto(self._bids_path, flat, redo=redo)
+        bids_path = self._bids_path
+        pipe.make_bad_channels_auto(bids_path, flat, redo=redo, noise=noise)
 
     def make_bad_channels_neighbor_correlation(
             self,
@@ -4213,8 +4235,7 @@ class Pipeline(FileTree):
                 ds = self.load_epochs(None, True, False, decim=1, epoch=cov.epoch)
             covariance = cov.make(ds['epochs'], log_path)
         else:
-            empty_room_bids_path = self._bids_path.find_empty_room()
-            raw = self._raw['raw'].load(empty_room_bids_path)
+            raw = self.load_raw(noise=True)
             covariance = cov.make(raw)
         if MNE_VERSION >= V1:
             covariance.save(dest, overwrite=True)

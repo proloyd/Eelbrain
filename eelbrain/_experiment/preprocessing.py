@@ -73,7 +73,7 @@ class RawPipe:
     def _normalize_dict(state: dict) -> None:
         pass
 
-    def cache(self, path: BIDSPath) -> bool:
+    def cache(self, path: BIDSPath, noise: bool = False) -> bool:
         "Check if raw file exists and is up to date"
         raise NotImplementedError
 
@@ -93,14 +93,15 @@ class RawPipe:
             path: BIDSPath,
             add_bads: AddBadsArg = True,
             preload: bool = False,
+            noise: bool = False,
     ) -> mne.io.BaseRaw:
         "Call _load() and add bad channels"
-        raw = self._load(path, preload)
+        raw = self._load(path, preload, noise=noise)
         # bad channels
         if isinstance(add_bads, Sequence):
             raw.info['bads'] = list(add_bads)
         elif add_bads is True:
-            raw.info['bads'] = self.load_bad_channels(path)
+            raw.info['bads'] = self.load_bad_channels(path, noise=noise)
         elif add_bads is False:
             raw.info['bads'] = []
         else:
@@ -111,6 +112,7 @@ class RawPipe:
             self,
             path: BIDSPath,
             preload: bool,
+            noise: bool = False,
     ) -> mne.io.BaseRaw:
         raise NotImplementedError
 
@@ -118,7 +120,7 @@ class RawPipe:
         "Process the info without processing the raw data, return the processed info"
         raise NotImplementedError
 
-    def load_bad_channels(self, path: BIDSPath) -> List[str]:
+    def load_bad_channels(self, path: BIDSPath, noise: bool = False) -> List[str]:
         raise NotImplementedError
 
     def make_bad_channels(
@@ -126,6 +128,7 @@ class RawPipe:
             path: BIDSPath,
             bad_chs: Union[Tuple[str], str, int],
             redo: bool,
+            noise: bool = False,
     ) -> None:
         raise NotImplementedError
 
@@ -134,6 +137,7 @@ class RawPipe:
             path: BIDSPath,
             flat: float,
             redo: bool,
+            noise: bool = False,
     ) -> None:
         raise NotImplementedError
 
@@ -235,8 +239,10 @@ class RawSource(RawPipe):
             self,
             path: BIDSPath,
             preload: bool,
+            noise: bool = False,
     ) -> mne.io.BaseRaw:
         "Load raw data from different formats"
+        path = path if not noise else path.find_empty_room()
         raw_path = self._raw_path(path)
         match path.extension:
             case '.fif':
@@ -272,8 +278,9 @@ class RawSource(RawPipe):
     def load_info(self, path: BIDSPath) -> mne.Info:
         return self.load(path).info
 
-    def load_bad_channels(self, path: BIDSPath) -> List[str]:
+    def load_bad_channels(self, path: BIDSPath, noise: bool = False) -> List[str]:
         "Get channels.tsv content, create if it does not exist"
+        path = path if not noise else path.find_empty_room()
         bads_path = self._bads_path(path)
         if exists(bads_path):
             channels_df = pd.read_csv(bads_path, sep='\t')
@@ -303,7 +310,9 @@ class RawSource(RawPipe):
             path: BIDSPath,
             bad_chs: Union[Tuple[str], str, int],
             redo: bool,
+            noise: bool = False,
     ) -> None:
+        path = path if not noise else path.find_empty_room()
         # check input list
         if isinstance(bad_chs, (str, int)):
             bad_chs = (bad_chs,)
@@ -315,7 +324,7 @@ class RawSource(RawPipe):
         if old_bads is not None and not redo:
             new_bads = sorted(set(old_bads).union(new_bads))
         # print change
-        print(f"{old_bads} -> {new_bads}")
+        self.log.info("Bad channels: %s -> %s for %s", old_bads, new_bads, self._bads_path(path))
         if new_bads == old_bads:
             return
         # write new bad channels
@@ -329,7 +338,10 @@ class RawSource(RawPipe):
             path: BIDSPath,
             flat: float = None,
             redo: bool = False,
+            noise: bool = False,
     ) -> None:
+        if noise:
+            path = path.find_empty_room()
         if flat is None:
             if path.datatype == 'meg':
                 flat = 1e-14
@@ -341,7 +353,7 @@ class RawSource(RawPipe):
             return
         raw = self._load(path, False)
         bad_chs: List[str] = raw.info['bads']
-        sysname = self.get_sysname(raw.info, path.subject, None)
+        sysname = self.get_sysname(raw.info, path.subject, path.datatype)
         raw = load.mne.raw_ndvar(raw, sysname=sysname, adjacency=self.adjacency)
         bad_chs.extend(raw.sensor.names[raw.std('time') < flat])
         self.make_bad_channels(path, bad_chs, redo)
@@ -387,7 +399,10 @@ class RawSource(RawPipe):
             self,
             path: BIDSPath,
             bad_chs: bool = True,
+            noise: bool = False,
     ) -> float:
+        if noise:
+            path = path.find_empty_room()
         raw_path = self._raw_path(path)
         bads_path = self._bads_path(path)
         if bad_chs:
@@ -441,12 +456,14 @@ class CachedRawPipe(RawPipe):
             self,
             path: BIDSPath,
             preload: bool,
+            noise: bool = False,
     ) -> mne.io.BaseRaw:
         """Read cached raw or make one"""
+        # Resolve empty room path for actual file reading, not for _make()
         if not self._cache:
-            return self._make(path, preload)
-        cache_path = self._cache_path(path)
-        if self.cache(path):
+            return self._make(path, preload, noise=noise)
+        cache_path = self._cache_path(path if not noise else path.find_empty_room())
+        if self.cache(path if not noise else path.find_empty_room()):
             with warnings.catch_warnings():  # BIDS paths are not covered by mne standard
                 warnings.filterwarnings('ignore', 'This filename', module='mne')
                 raw = mne.io.read_raw_fif(
@@ -463,7 +480,7 @@ class CachedRawPipe(RawPipe):
                 logger.info(f"eelbrain {__version__}")
                 logger.info(f"mne {mne.__version__}")
                 logger.info(repr(self._as_dict()))
-                raw = self._make(path, True)
+                raw = self._make(path, True, noise=noise)
             # save
             try:
                 raw.save(cache_path, overwrite=True, verbose='ERROR')
@@ -477,13 +494,14 @@ class CachedRawPipe(RawPipe):
     def load_info(self, path: BIDSPath) -> mne.Info:
         return self.source.load_info(path)
 
-    def load_bad_channels(self, path: BIDSPath) -> list[str]:
-        return self.source.load_bad_channels(path)
+    def load_bad_channels(self, path: BIDSPath, noise: bool = False) -> list[str]:
+        return self.source.load_bad_channels(path, noise=noise)
 
     def _make(
             self,
             path: BIDSPath,
             preload: bool,
+            noise: bool = False,
     ) -> mne.io.BaseRaw:
         raise NotImplementedError
 
@@ -492,8 +510,9 @@ class CachedRawPipe(RawPipe):
             path: BIDSPath,
             bad_chs: Union[Tuple[str], str, int],
             redo: bool,
+            noise: bool = False,
     ) -> None:
-        self.source.make_bad_channels(path, bad_chs, redo)
+        self.source.make_bad_channels(path, bad_chs, redo, noise=noise)
 
     def make_bad_channels_auto(self, *args, **kwargs) -> None:
         self.source.make_bad_channels_auto(*args, **kwargs)
@@ -518,8 +537,9 @@ class CachedRawPipe(RawPipe):
             self,
             path: BIDSPath,
             bad_chs: bool = True,
+            noise: bool = False,
     ) -> float:
-        return self.source.mtime(path, bad_chs or self._bad_chs_affect_cache)
+        return self.source.mtime(path, bad_chs or self._bad_chs_affect_cache, noise=noise)
 
 
 class RawFilter(CachedRawPipe):
@@ -571,9 +591,10 @@ class RawFilter(CachedRawPipe):
             self,
             path: BIDSPath,
             preload: bool,
+            noise: bool = False,
     ) -> mne.io.BaseRaw:
-        raw = self.source.load(path, preload=True)
-        self.log.info("Raw %s: filtering for %s...", self.name, path.fpath)
+        raw = self.source.load(path, preload=True, noise=noise)
+        self.log.info("Raw %s: filtering for %s...", self.name, path.fpath if not noise else path.find_empty_room().fpath)
         raw.filter(*self.args, **self._use_kwargs, n_jobs=self.n_jobs, verbose=MNE_VERBOSITY)
         return raw
 
@@ -636,9 +657,10 @@ class RawFilterElliptic(CachedRawPipe):
             self,
             path: BIDSPath,
             preload: bool,
+            noise: bool = False,
     ) -> mne.io.BaseRaw:
-        raw = self.source.load(path, preload=True)
-        self.log.info("Raw %s: filtering for %s...", self.name, path.fpath)
+        raw = self.source.load(path, preload=True, noise=noise)
+        self.log.info("Raw %s: filtering for %s...", self.name, path.fpath if not noise else path.find_empty_room().fpath)
         # filter data
         picks = mne.pick_types(raw.info, meg=True, eeg=True, ref_meg=True)
         sos = self._sos(raw.info['sfreq'])
@@ -697,9 +719,6 @@ class RawICA(CachedRawPipe):
     Use :meth:`Pipeline.make_ica_selection` for each subject to
     select ICA components that should be removed. The arguments to that function
     determine what data is used to visualize the component time courses.
-    For example, to determine which components load strongly on empty room data,
-    use ``e.make_ica_selection(task='emptyroom')`` (assuming an
-    ``'emptyroom'`` task is present).
 
     This step merges bad channels from all tasks.
 
@@ -741,11 +760,13 @@ class RawICA(CachedRawPipe):
         self.kwargs = {'method': method, 'random_state': random_state, **kwargs}
         self.fit_kwargs = dict(fit_kwargs) if fit_kwargs else {}
 
-    def load_bad_channels(self, path: BIDSPath) -> List[str]:
+    def load_bad_channels(self, path: BIDSPath, noise: bool = False) -> List[str]:
         bad_chs = set()
         for task in self.task:
             path_ = path.copy().update(task=task)
             bad_chs.update(self.source.load_bad_channels(path_))
+        if noise:
+            bad_chs.update(self.source.load_bad_channels(path, noise=noise))
         return sorted(bad_chs)
 
     def load_info(self, path: BIDSPath) -> mne.Info:
@@ -855,8 +876,9 @@ class RawICA(CachedRawPipe):
             self,
             path: BIDSPath,
             preload: bool,
+            noise: bool = False,
     ) -> mne.io.BaseRaw:
-        raw = self.source.load(path, preload=True)
+        raw = self.source.load(path, preload=True, noise=noise)
         return self._apply(path, raw, self.name)
 
     def _apply(
@@ -884,8 +906,9 @@ class RawICA(CachedRawPipe):
             self,
             path: BIDSPath,
             bad_chs: bool = True,
+            noise: bool = False,
     ) -> float:
-        mtime = CachedRawPipe.mtime(self, path, bad_chs or self._bad_chs_affect_cache)
+        mtime = CachedRawPipe.mtime(self, path, bad_chs or self._bad_chs_affect_cache, noise=noise)
         if mtime:
             ica_path = self._ica_path(path)
             if exists(ica_path):
@@ -957,8 +980,8 @@ class RawApplyICA(CachedRawPipe):
         out['ica_source'] = self._ica_source
         return out
 
-    def load_bad_channels(self, path: BIDSPath) -> list[str]:
-        return self.ica_source.load_bad_channels(path)
+    def load_bad_channels(self, path: BIDSPath, noise: bool = False) -> list[str]:
+        return self.ica_source.load_bad_channels(path, noise=noise)
 
     def load_info(self, path: BIDSPath) -> mne.Info:
         info = super().load_info(path)
@@ -969,16 +992,18 @@ class RawApplyICA(CachedRawPipe):
             self,
             path: BIDSPath,
             preload: bool,
+            noise: bool = False,
     ) -> mne.io.BaseRaw:
-        raw = self.source.load(path, preload=True)
+        raw = self.source.load(path, preload=True, noise=noise)
         return self.ica_source._apply(path, raw, self.name)
 
     def mtime(
             self,
             path: BIDSPath,
             bad_chs: bool = True,
+            noise: bool = False,
     ) -> float:
-        mtime = CachedRawPipe.mtime(self, path, bad_chs)
+        mtime = CachedRawPipe.mtime(self, path, bad_chs, noise=noise)
         if mtime:
             ica_mtime = self.ica_source.mtime(path, bad_chs)
             if ica_mtime:
@@ -986,42 +1011,63 @@ class RawApplyICA(CachedRawPipe):
 
 
 class RawMaxwell(CachedRawPipe):
-    """Maxwell filter raw pipe
+    """Maxwell filter raw pipe.
 
     Parameters
     ----------
-    source : str
+    source
         Name of the raw pipe to use for input data.
-    bad_condition : str
+    bad_condition
         How to deal with ill-conditioned SSS matrices; by default, an error is
         raised, which might prevent the process to complete for some subjects.
         Set to ``'warning'`` to proceed anyways.
-    cache : bool
+    cache
         Cache the resulting raw files (default ``True``).
+    flat
+        Threshold for marking flat channels as bad (default 1e-14).
     ...
         :func:`mne.preprocessing.maxwell_filter` parameters.
 
     See Also
     --------
     Pipeline.raw
+
+    Notes
+    -----
+    For empty room recordings, there is no ``dev_head_t`` information, ``coord_frame = 'meg'`` will be used automatically.
+    Flat channels are automatically marked as bad with a threshold of parameter ``flat``.
     """
 
     _bad_chs_affect_cache = True
 
-    def __init__(self, source, bad_condition='error', cache=True, **kwargs):
+    def __init__(
+        self,
+        source: str,
+        bad_condition: str = 'error',
+        cache: bool = True,
+        flat: float = 1e-14,
+        **kwargs,
+    ):
         CachedRawPipe.__init__(self, source, cache)
         self.kwargs = kwargs
         self.bad_condition = bad_condition
+        self.flat = flat
 
     def _make(
             self,
             path: BIDSPath,
             preload: bool,
+            noise: bool = False,
     ) -> mne.io.BaseRaw:
-        raw = self.source.load(path)
-        self.log.info("Raw %s: computing Maxwell filter for %s", self.name, path.fpath)
+        raw = self.source.load(path, noise=noise)
+        sysname = self.get_sysname(raw.info, path.subject, path.datatype)
+        adjacency = self.get_adjacency(path.datatype)
+        raw_ndvar = load.mne.raw_ndvar(raw, sysname=sysname, adjacency=adjacency)
+        raw.info['bads'].extend(raw_ndvar.sensor.names[raw_ndvar.std('time') < self.flat])
+        self.log.info("Raw %s: computing Maxwell filter for %s", self.name, path.fpath if not noise else path.find_empty_room().fpath)
         with user_activity:
-            return mne.preprocessing.maxwell_filter(raw, bad_condition=self.bad_condition, verbose=MNE_VERBOSITY, **self.kwargs)
+            coord_frame = 'meg' if noise else 'head'
+            return mne.preprocessing.maxwell_filter(raw, bad_condition=self.bad_condition, coord_frame=coord_frame, verbose=MNE_VERBOSITY, **self.kwargs)
 
     def _as_dict(self, args: Sequence[str] = ()) -> dict:
         return CachedRawPipe._as_dict(self, [*args, 'kwargs'])
@@ -1043,9 +1089,10 @@ class RawOversampledTemporalProjection(CachedRawPipe):
             self,
             path: BIDSPath,
             preload: bool,
+            noise: bool = False,
     ) -> mne.io.BaseRaw:
-        raw = self.source.load(path)
-        self.log.info("Raw %s: computing oversampled temporal projection for %s", self.name, path.fpath)
+        raw = self.source.load(path, noise=noise)
+        self.log.info("Raw %s: computing oversampled temporal projection for %s", self.name, path.fpath if not noise else path.find_empty_room().fpath)
         with user_activity:
             return mne.preprocessing.oversampled_temporal_projection(raw, self.duration)
 
@@ -1068,11 +1115,12 @@ class RawUpdateBadChannels(CachedRawPipe):
             self,
             path: BIDSPath,
             preload: bool,
+            noise: bool = False,
     ) -> mne.io.BaseRaw:
-        return self.source.load(path, preload=preload)
+        return self.source.load(path, preload=preload, noise=noise)
 
-    def load_bad_channels(self, path: BIDSPath) -> list[str]:
-        bad_channels = self.source.load_bad_channels(path)
+    def load_bad_channels(self, path: BIDSPath, noise: bool = False) -> list[str]:
+        bad_channels = self.source.load_bad_channels(path, noise=noise)
         subject = path.subject
         if subject in self.bad_channels:
             key = subject
@@ -1128,8 +1176,9 @@ class RawReReference(CachedRawPipe):
             self,
             path: BIDSPath,
             preload: bool,
+            noise: bool = False,
     ) -> mne.io.BaseRaw:
-        raw = self.source.load(path, preload=True)
+        raw = self.source.load(path, preload=True, noise=noise)
         if self.add:
             with warnings.catch_warnings():
                 warnings.filterwarnings('ignore', 'The locations of multiple reference channels are ignored', module='mne')

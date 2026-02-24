@@ -80,7 +80,7 @@ The pipeline expects input dataset in `BIDS (Brain Imaging Data Structure) <http
     In BIDS specification, ``{root}/derivatives`` is for files that do not fit into the BIDS structure, such as FreeSurfer MRIs and Eelbrain-generated files.
 
 
-``{subject}``, ``{session}``, ``{task}`` and ``{run}`` are `BIDS entities <https://bids-specification.readthedocs.io/en/stable/appendices/entities.html>`_. ``{session}`` and ``{run}`` are optional. ``{datatype}`` is inferred by the pipeline from the data files, and can be ``'meg'`` or ``'eeg'``.
+``{subject}``, ``{session}``, ``{task}`` and ``{run}`` are `BIDS entities <https://bids-specification.readthedocs.io/en/stable/appendices/entities.html>`_. ``{session}`` and ``{run}`` are optional. ``{datatype}`` is inferred by the pipeline from the data files, and can be ``'meg'`` or ``'eeg'``. Apart from the common entities shown above, there can be other ones depending on your dataset, such as `acquisition <https://bids-specification.readthedocs.io/en/stable/appendices/entities.html#acq>`_ or `split <https://bids-specification.readthedocs.io/en/stable/appendices/entities.html#split>`_.
 
 
 ``MRI`` files (including ``trans-file``) are optional and only needed for source localization. The ``{root}/derivatives/freesurfer`` directory is `FreeSurfer <https://surfer.nmr.mgh.harvard.edu>`_ subject directory. They either contain the files created by FreeSurfer's `recon-all <https://surfer.nmr.mgh.harvard.edu/fswiki/recon-all>`_ command, or are created by the MNE-Python coregistration utility for scaled template brains. An ``fsaverage`` folder can be used to store the template brain. Note that the pipeline doesn't use the NIfTI format that BIDS specifies. A corresponding ``trans-file`` is created with the MNE-Python coregistration utility in either case (see more information on using `structural MRIs <https://github.com/Eelbrain/Eelbrain/wiki/Coregistration%3A-Structural-MRI>`_ or the `fsaverage template brain <https://github.com/Eelbrain/Eelbrain/wiki/Coregistration%3A-Template-Brain>`_).
@@ -310,8 +310,8 @@ Empty room noise covariance
 
 To use empty room data for estimating the noise covariance, follow these steps:
 
- - Put an empty room recording in each subject's MEG directory, just like the other MEG files, with task name ``emptyroom``. If you want to use the same empty room file for all subjects you can make links instead of copies to save space.
- - Use the empty room covariance though :ref:`state-cov` with ``e.set(cov='emptyroom')``
+- Set up empty room data according to the `instruction in BIDS specification <https://bids-specification.readthedocs.io/en/stable/modality-specific-files/magnetoencephalography.html#empty-room-meg-recordings>`_.
+- Use the empty room covariance through :ref:`state-cov` with ``e.set(cov='emptyroom')``.
 
 
 .. _Pipeline-intro-analysis:
@@ -456,7 +456,7 @@ Exclude certain entities from the experiment, e.g.::
 
     ignore_entities = {
         'subject': ['S666', 'S999'],
-        'session': ['emptyroom'],
+        'session': ['02'],
     }
 
 .. py:attribute:: Pipeline.mri_subjects
