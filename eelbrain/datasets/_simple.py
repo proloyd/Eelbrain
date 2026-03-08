@@ -3,7 +3,7 @@ from itertools import product
 from pathlib import Path
 import shutil
 import string
-from typing import Literal, Optional, Tuple, Union
+from typing import Literal
 from os.path import join
 
 import mne
@@ -184,7 +184,7 @@ def get_mne_stc(ndvar=False, src='ico-5', subject='sample'):
             return stc
     elif src == 'oct-4':
         if subject != 'sample':
-            raise ValueError(f"subject={subject!r}: source space only available for 'sample'")
+            raise ValueError(f"{subject=}: source space only available for 'sample'")
         inv = mne.minimum_norm.read_inverse_operator(meg_sdir / 'sample_audvis_trunc-meg-eeg-oct-4-meg-inv.fif')
         evokeds = mne.read_evokeds(meg_sdir / 'sample_audvis_trunc-ave.fif')
         evoked = mne.combine_evoked([evokeds[i].apply_baseline() for i in [0, 1]], [1, 1])
@@ -193,7 +193,7 @@ def get_mne_stc(ndvar=False, src='ico-5', subject='sample'):
         stc_path = meg_sdir / f'{data_subject}_audvis_trunc-meg'
         stc = mne.read_source_estimate(str(stc_path), subject)
     else:
-        raise ValueError(f"src={src!r}")
+        raise ValueError(f"{src=}")
 
     if ndvar:
         return load.mne.stc_ndvar(stc, subject, src, subjects_dir)
@@ -230,8 +230,8 @@ def _mne_source_space(subject, src_tag, subjects_dir):
 def get_mne_sample(
         tmin: float = -0.1,
         tmax: float = 0.4,
-        baseline: Optional[Tuple[Optional[float], Optional[float]]] = (None, 0),
-        sns: Union[bool, Literal['eeg', 'mag', 'grad']] = False,
+        baseline: tuple[float | None, float | None] | None = (None, 0),
+        sns: bool | Literal['eeg', 'mag', 'grad'] = False,
         src: Literal[False, 'ico', 'vol'] = None,
         sub: str = "modality=='A'",
         ori: Literal['free', 'fixed', 'vector'] = 'free',

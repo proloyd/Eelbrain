@@ -45,11 +45,11 @@ dependencies:
 - sphinxcontrib-bibtex
 - pydocstyle
 # testing
-- flake8
+- pre-commit
 - pytest
 - pytest-cov
 - pytest-faulthandler
-- pingouin
+- pingouin >= 0.6.0  # breaking API used in tests
 #- pytest-sugar  # errors on Linux
 # testing of R integration
 - rpy2 < 3.6.1

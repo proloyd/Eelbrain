@@ -90,6 +90,7 @@ The steps below outline the recommended workflow.
 5. **Test Locally**:
    Add tests for new features and bug fixes to ensure code quality and prevent regressions.
    Run existing tests to make sure nothing breaks (see :ref:`dev-testing`).
+   Run the ``pre-commit`` tools to ensure compliance with our coding standards (see :ref:`code-style` below).
 6. **Push to Your Fork**: Push your branch to your fork on GitHub.
 7. **Open a Pull Request (PR)**:
 
@@ -137,7 +138,7 @@ Running tests locally (from the project root)::
 
 For more options, see the `pytest docs <https://docs.pytest.org/en/stable/how-to/usage.html>`_.
 
-An additional test for the :class:`MneExperiment` pipeline takes longer to run and can be run separately as needed::
+An additional test for the :class:`Pipeline` takes longer to run and can be run separately as needed::
 
     $ pytest --runslow eelbrain/_experiment/tests/test_sample_experiment.py::test_sample_source
 
@@ -148,6 +149,8 @@ if you get a corresponding error, run ``$ ./fix-bin pytest`` from the
 ``Eelbrain`` repository root.
 
 
+.. _code-style
+
 Coding Style and Documentation
 ------------------------------
 
@@ -156,8 +159,10 @@ Coding Style and Documentation
     We recommend using tools to ensure compliance:
 
     - IDEs like PyCharm and VSCode can fix and alert you to style issues as you code.
-    - **flake8**: Run ``$ flake8 eelbrain`` from the project root to check for issues locally.
-    - **autopep8**: Use `this <https://pypi.org/project/autopep8/>`_ to automatically fix common style issues.
+    - `pre-commit <https://pre-commit.com/>`_ can run tools that automatically detect, and often fix, common code style issues.
+      Use ``$ pre-commit run --all-files`` from the project root to run these tools locally.
+      The tools can also be run automatically upon committing changes (see `pre-commit instructions <https://pre-commit.com/#3-install-the-git-hook-scripts>`_).
+      For the specific tools, see ``.pre-commit-config.yaml`` in the project root.
 
 **Consistent Naming and API Consistency**
     To make the library intuitive, we strive for consistency across the API:
