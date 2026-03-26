@@ -12,6 +12,7 @@ import scipy.stats
 from scipy.linalg import inv
 
 from .._data_obj import CategorialArg, CellArg, Dataset, FactorArg, Model, Parametrization, asarray, ascategorial, asfactor, asmodel
+from .._exceptions import WrongDimensionError
 from . import opt, vector
 
 
@@ -336,7 +337,7 @@ def t2_1samp(y, rotation=None, out=None):
     n_cases = y.shape[0]
     n_dims = y.shape[1]
     if n_dims <= 1 or n_dims > 3:
-        raise ValueError(f'y with shape {y.shape}: T**2 statistic needs 2d/3d vector valued samples.')
+        raise WrongDimensionError(f'y with shape {y.shape}: T**2 statistic needs 2d/3d vector valued samples.')
 
     if out is None:
         out = np.empty(y.shape[2:])

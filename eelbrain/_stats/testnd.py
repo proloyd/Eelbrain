@@ -2332,8 +2332,6 @@ class VectorDifferenceIndependent(Vector):
     def _vector_perm(y, n1, out, seed, use_norm):
         assert use_norm
         n_cases, n_dims, n_tests = y.shape
-        assert n_dims > 1
-        assert n_dims <= 3
         # randomize directions
         rotation = rand_rotation_matrices(n_cases, seed, n_dims)
         # randomize groups
