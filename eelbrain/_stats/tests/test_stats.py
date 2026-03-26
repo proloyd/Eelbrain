@@ -9,6 +9,7 @@ import scipy.stats
 from eelbrain import datasets, Model, Var
 from eelbrain._stats import stats
 from eelbrain._stats.permutation import permute_order, rand_rotation_matrices
+from eelbrain._exceptions import WrongDimensionError
 from eelbrain._utils.r_bridge import r
 
 
@@ -176,8 +177,12 @@ def test_t_ind():
 
 
 def test_vector():
-    # 3D
     ds = datasets.get_uts()
+    # space test should raise error on non-space data
+    with pytest.raises(WrongDimensionError):
+        stats.t2_1samp(ds.eval("uts.x[:,:1]"))
+
+    # 3D
     y = ds.eval("uts.x[:,:3]")
     n_cases = len(y)
     mean = y.mean(axis=0)
