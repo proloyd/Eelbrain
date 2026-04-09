@@ -147,7 +147,7 @@ def t2_stat(
         dsyevh3(sigma, vec, eig)
         max_eig = max(eig, 3)
         TOL = r_TOL * max_eig
-        
+
         for v in range(n_dims):
             temp = 0
             for u in range(n_dims):

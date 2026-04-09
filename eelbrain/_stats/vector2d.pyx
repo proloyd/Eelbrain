@@ -10,6 +10,8 @@ from libc.math cimport sin, cos
 cimport numpy as np
 
 
+cdef double r_TOL = 2.220446049250313e-16
+
 @cython.cdivision(True)
 def t2_stat(
         const np.npy_float64[:,:,:] y,
@@ -55,7 +57,7 @@ def t2_stat(
         norm = mean[0] * mean[0] * sigma[1][1]
         norm += mean[1] * mean[1] * sigma[0][0]
         norm -= 2 * mean[0] * mean[1] * sigma[0][1]
-        norm /= det_sigma
+        norm /= (det_sigma + r_TOL)
         out[i] = norm / n_cases
     return out
 
@@ -110,7 +112,6 @@ def t2_stat_rotated(
         norm = mean[0] * mean[0] * sigma[1][1]
         norm += mean[1] * mean[1] * sigma[0][0]
         norm -= 2 * mean[0] * mean[1] * sigma[0][1]
-        norm /= det_sigma        
+        norm /= (det_sigma + r_TOL)
         out[i] = norm / n_cases
     return out
-
