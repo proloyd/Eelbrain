@@ -1,9 +1,9 @@
 [build-system]
 requires = [
-    "setuptools >= 64.0.0",
-    "numpy >= 1.20",
+    "setuptools >= 70.1.0",
+    "numpy >= 2,< 3",  # build code 2.0 and 1.x compatible
     "cython >= 3",
-    ]
+]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -16,11 +16,9 @@ classifiers = [
   'Operating System :: Microsoft :: Windows',
   'Operating System :: Unix',
   'Programming Language :: Python :: 3 :: Only',
-  'Programming Language :: Python :: 3.10',
   'Programming Language :: Python :: 3.11',
   'Programming Language :: Python :: 3.12',
   'Programming Language :: Python :: 3.13',
-  'Programming Language :: Python :: 3.9',
 ]
 dependencies = [
   'appnope',
@@ -53,7 +51,7 @@ maintainers = [
 ]
 name = 'eelbrain'
 readme = 'README.md'
-requires-python = '>=3.8'
+requires-python = '>=3.11'
 dynamic = ["version"]
 
 [project.optional-dependencies]
@@ -73,7 +71,7 @@ gui = [
     'wxpython >= 4.0.3, != 4.1.0',
 ]
 full = [
-  'eelbrain[brain]',   
+  'eelbrain[brain]',
   'eelbrain[gui]',
 ]
 style = [
@@ -89,6 +87,50 @@ test = [
   'pytest-faulthandler',
   'pingouin',
   'statsmodels',
+]
+
+[tool.cibuildwheel]
+# a single build for abi3
+build = "cp311-*"
+archs = ["native"]
+before-build = "pip install abi3audit"
+test-requires = [
+    "pytest",
+    "pingouin",
+]
+test-command = "pytest -m \"not (slow or framework_build or file_test)\" -rsx -v --pyargs eelbrain"
+
+[tool.cibuildwheel.linux]
+repair-wheel-command = [
+  "auditwheel repair -w {dest_dir} {wheel}",
+  "abi3audit --strict --report --verbose {wheel}",
+]
+
+[[tool.cibuildwheel.overrides]]
+select = "*-musllinux*"
+test-requires = [
+    "pytest",
+    "statsmodels",  # no pingouin because it requires sklearn, which does not have binary wheels
+]
+
+[tool.cibuildwheel.macos]
+archs = ["native"]
+environment = { MACOSX_DEPLOYMENT_TARGET="11", SKIP_N_WORKERS_TESTS="1" }
+# https://mac.r-project.org/openmp/
+before-all = [
+  "wget https://mac.r-project.org/openmp/openmp-19.1.0-darwin20-Release.tar.gz",
+  "sudo tar -xzC / -f openmp-19.1.0-darwin20-Release.tar.gz"
+]
+repair-wheel-command = [
+  "delocate-wheel --require-archs {delocate_archs} -w {dest_dir} -v {wheel}",
+  "abi3audit --strict --report --verbose {wheel}",
+]
+
+[tool.cibuildwheel.windows]
+before-build = "pip install delvewheel abi3audit"
+repair-wheel-command = [
+  "delvewheel repair -w {dest_dir} {wheel}",
+  "abi3audit --strict --report --verbose {wheel}",
 ]
 
 [tool.tomlsort]
@@ -107,7 +149,6 @@ tracker = 'https://github.com/Eelbrain/eelbrain/issues'
 include-package-data = false
 
 [tool.setuptools.packages.find]
-exclude = ['eelbrain*tests']
 include = ['eelbrain*']
 
 [tool.setuptools.dynamic]
