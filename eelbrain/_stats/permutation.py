@@ -260,13 +260,13 @@ def _sample_xi_by_rejection(n: int, rng: np.random.RandomState):
 
 def rand_rotation_matrices(n: int, seed: int, dim: int):
     if dim > 3:
-        raise NotImplementedError(f"dim={dim} is not supported!")
+        raise NotImplementedError(f"{dim=} is not supported!")
     elif dim == 3:
         return rand_rotation_matrices_3d(n, seed)
     elif dim == 2:
         return rand_rotation_matrices_2d(n, seed)
     else:
-        raise ValueError(f"dim={dim} does not have rotation.")
+        raise ValueError(f"{dim=} does not have rotation.")
 
 
 def rand_rotation_matrices_3d(n: int, seed: int):
