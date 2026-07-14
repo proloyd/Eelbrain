@@ -1025,7 +1025,7 @@ class RANSACProjector:
     ):
         YYs = []
         for offset in offsets:
-            XX = X[:, offset : offset + win_samples]
+            XX = X[:, offset: offset + win_samples]
             # reconstruct: (n_sensors * num_samples, win_samples) →
             # (num_samples, n_sensors, win_samples)
             YY = RANSACProjector._transform(
@@ -1161,7 +1161,7 @@ class RANSACProjector:
         assert self.n_sensors == X.shape[0]
         if n_times < win_samples:
             raise RuntimeError(
-                f"Window length exceeds data horizon. Use smaller windows."
+                f"Window length exceeds data horizon, {n_times / sfreq} s. Use smaller windows."
             )
         if data.has_case:
             # exactly one window per case, no remainder
@@ -1249,7 +1249,7 @@ class RANSACProjector:
         corrs = list()
 
         for offset in offsets:
-            XX = X[:, offset : offset + win_samples]
+            XX = X[:, offset: offset + win_samples]
             # reconstruct: (n_sensors * num_samples, win_samples) →
             # (num_samples, n_sensors, win_samples)
             corr = RANSACProjector._compute_correlation(
