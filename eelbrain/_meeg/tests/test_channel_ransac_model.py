@@ -1,6 +1,5 @@
 # Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
 """Tests for ChannelRANSACModel, and for API parity with ChannelModel."""
-import inspect
 
 import numpy as np
 import pytest
