@@ -8,6 +8,7 @@ Reference
 ---------
 Christian Kothe, SCCN/UCSD — https://github.com/sccn/clean_rawdata
 """
+
 from __future__ import annotations
 
 import mne
@@ -17,12 +18,12 @@ from scipy.special import gammaincinv as _gammaincinv
 
 
 def fit_eeg_distribution(
-        X: np.ndarray,
-        min_clean_fraction: float = 0.25,
-        max_dropout_fraction: float = 0.1,
-        quants: tuple[float, float] = (0.022, 0.6),
-        step_sizes: tuple[float, float] = (0.01, 0.01),
-        shape_range: np.ndarray | None = None,
+    X: np.ndarray,
+    min_clean_fraction: float = 0.25,
+    max_dropout_fraction: float = 0.1,
+    quants: tuple[float, float] = (0.022, 0.6),
+    step_sizes: tuple[float, float] = (0.01, 0.01),
+    shape_range: np.ndarray | None = None,
 ) -> tuple[float, float, float, float]:
     """Estimate the mean and std of clean EEG from potentially contaminated data.
 
@@ -75,20 +76,24 @@ def fit_eeg_distribution(
         rescale.append(b / (2 * _gamma(1.0 / b)))
 
     # build shifted data matrix: rows=quantile range, cols=lower-offset variants
-    lower_offsets = np.arange(lower_min, lower_min + max_dropout_fraction + 1e-9, step_sizes[0])
+    lower_offsets = np.arange(
+        lower_min, lower_min + max_dropout_fraction + 1e-9, step_sizes[0]
+    )
     col_starts = np.round(n * lower_offsets).astype(int)
     n_rows = int(round(n * max_width))
     # guard against going out of bounds
     col_starts = np.clip(col_starts, 0, n - n_rows - 1)
     # shape: (n_rows, n_offsets)
-    Xmat = np.column_stack([X[s: s + n_rows] for s in col_starts])
-    X1 = Xmat[0, :]                 # minimum in each column
-    Xmat = Xmat - X1                # shift so minimum is 0
+    Xmat = np.column_stack([X[s : s + n_rows] for s in col_starts])
+    X1 = Xmat[0, :]  # minimum in each column
+    Xmat = Xmat - X1  # shift so minimum is 0
 
     opt_val = np.inf
     opt_beta_val = shape_range[0]
 
-    width_range = np.round(n * np.arange(max_width, min_width - 1e-9, -step_sizes[1])).astype(int)
+    width_range = np.round(
+        n * np.arange(max_width, min_width - 1e-9, -step_sizes[1])
+    ).astype(int)
     width_range = width_range[width_range >= 2]
 
     for m in width_range:
@@ -109,11 +114,16 @@ def fit_eeg_distribution(
 
         for bi, b in enumerate(shape_range):
             bounds = zbounds[bi]
-            x_bins = bounds[0] + (np.arange(0.5, nbins) / nbins) * np.diff(bounds)[0]
-            p = np.exp(-np.abs(x_bins) ** b) * rescale[bi]
-            p = p / p.sum()                             # (nbins,)
+            x_bins = (
+                bounds[0]
+                + (np.arange(0.5, nbins) / nbins) * np.diff(bounds)[0]
+            )
+            p = np.exp(-(np.abs(x_bins) ** b)) * rescale[bi]
+            p = p / p.sum()  # (nbins,)
 
-            kl = (p[:, None] * (np.log(p[:, None]) - log_q)).sum(axis=0) + np.log(m)
+            kl = (p[:, None] * (np.log(p[:, None]) - log_q)).sum(
+                axis=0
+            ) + np.log(m)
             idx = np.argmin(kl)
             min_val = kl[idx]
             if min_val < opt_val:
@@ -121,11 +131,18 @@ def fit_eeg_distribution(
                 opt_beta_val = b
                 opt_bounds = bounds
                 safe_cols = np.where(safe)[0]
-                opt_lu = np.array([X1[safe_cols[idx]], X1[safe_cols[idx]] + Xmat[m - 1, safe_cols[idx]]])
+                opt_lu = np.array(
+                    [
+                        X1[safe_cols[idx]],
+                        X1[safe_cols[idx]] + Xmat[m - 1, safe_cols[idx]],
+                    ]
+                )
 
     alpha = (opt_lu[1] - opt_lu[0]) / np.diff(opt_bounds)[0]
     mu = opt_lu[0] - opt_bounds[0] * alpha
-    sig = np.sqrt(alpha ** 2 * _gamma(3.0 / opt_beta_val) / _gamma(1.0 / opt_beta_val))
+    sig = np.sqrt(
+        alpha**2 * _gamma(3.0 / opt_beta_val) / _gamma(1.0 / opt_beta_val)
+    )
     return float(mu), float(sig), float(alpha), float(opt_beta_val)
 
 
@@ -137,21 +154,23 @@ def _bad_runs(bad_mask: np.ndarray) -> list[tuple[int, int]]:
     padded = np.concatenate([[True], bad_mask, [True]])
     edges = np.diff(padded.astype(int))
     starts = np.where(edges == 1)[0][:-1]
-    ends = np.where(edges == -1)[0][1:] - 1  # inclusive index of the last bad sample
+    ends = (
+        np.where(edges == -1)[0][1:] - 1
+    )  # inclusive index of the last bad sample
     return list(zip(starts, ends))
 
 
 def clean_windows(
-        raw: mne.io.BaseRaw,
-        max_bad_channels: float = 0.2,
-        zthresholds: tuple[float, float] = (-3.5, 5.0),
-        window_len: float = 1.0,
-        window_overlap: float = 0.66,
-        max_dropout_fraction: float = 0.1,
-        min_clean_fraction: float = 0.25,
-        truncate_quant: tuple[float, float] = (0.022, 0.6),
-        step_sizes: tuple[float, float] = (0.01, 0.01),
-        picks: str | list[str] | None = "eeg",
+    raw: mne.io.BaseRaw,
+    max_bad_channels: float = 0.2,
+    zthresholds: tuple[float, float] = (-3.5, 5.0),
+    window_len: float = 1.0,
+    window_overlap: float = 0.66,
+    max_dropout_fraction: float = 0.1,
+    min_clean_fraction: float = 0.25,
+    truncate_quant: tuple[float, float] = (0.022, 0.6),
+    step_sizes: tuple[float, float] = (0.01, 0.01),
+    picks: str | list[str] | None = "eeg",
 ) -> list[tuple[str, float, float]]:
     """Find time windows with abnormally high or low EEG power.
 
@@ -211,9 +230,15 @@ def clean_windows(
     # per-channel z-scored RMS over windows
     wz = np.zeros((C, len(offsets)))
     for ci in range(C):
-        rms = np.array([np.sqrt(np.mean(data[ci, o: o + N] ** 2)) for o in offsets])
+        rms = np.array(
+            [np.sqrt(np.mean(data[ci, o : o + N] ** 2)) for o in offsets]
+        )
         mu, sig, _, _ = fit_eeg_distribution(
-            rms, min_clean_fraction, max_dropout_fraction, truncate_quant, step_sizes,
+            rms,
+            min_clean_fraction,
+            max_dropout_fraction,
+            truncate_quant,
+            step_sizes,
         )
         wz[ci] = (rms - mu) / max(sig, 1e-12)
 
@@ -243,7 +268,9 @@ def clean_windows(
         bad_mask = np.zeros(S, dtype=bool)
         for wi in np.where(exceeds[ci])[0]:
             o = offsets[wi]
-            bad_mask[o: o + N] = True
+            bad_mask[o : o + N] = True
         for start, end in _bad_runs(bad_mask):
-            bad_intervals.append((ch_names[ci], start / sfreq, (end + 1) / sfreq))
+            bad_intervals.append(
+                (ch_names[ci], start / sfreq, (end + 1) / sfreq)
+            )
     return bad_intervals
