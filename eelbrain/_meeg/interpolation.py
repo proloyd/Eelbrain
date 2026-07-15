@@ -6,6 +6,7 @@ epochs, only over the time window in which a channel is bad). This builds on the
 vendored MNE-Python spherical-spline / field-mapping primitives in
 :mod:`eelbrain.mne_fixes._interpolation`.
 """
+
 from __future__ import annotations
 
 import logging
@@ -14,13 +15,17 @@ import numpy as np
 
 import mne
 
-from ..mne_fixes._interpolation import get_channel_positions, map_meg_channels, _make_interpolation_matrix
+from ..mne_fixes._interpolation import (
+    get_channel_positions,
+    map_meg_channels,
+    _make_interpolation_matrix,
+)
 from .base import BadChannelWindow
 
 
 def _make_interpolator(
-        inst: mne.Epochs,
-        bad_channels: tuple[str, ...],
+    inst: mne.Epochs,
+    bad_channels: tuple[str, ...],
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Find indexes and interpolation matrix to interpolate bad channels
 
@@ -61,16 +66,20 @@ def _make_interpolator(
 
     # test spherical fit (linear least-squares sphere fit)
     a = np.c_[2 * pos_good, np.ones(len(pos_good))]
-    b = (pos_good ** 2).sum(1)
+    b = (pos_good**2).sum(1)
     x = np.linalg.lstsq(a, b, rcond=1e-6)[0]
     center = x[:3]
     radius = np.sqrt((x[:3] ** 2).sum() + x[3])
     distance = np.sqrt(np.sum((pos_good - center) ** 2, 1))
     distance = np.mean(distance / radius)
-    if np.abs(1. - distance) > 0.1:
-        logger.warning('Your spherical fit is poor, interpolation results are likely to be inaccurate.')
+    if np.abs(1.0 - distance) > 0.1:
+        logger.warning(
+            "Your spherical fit is poor, interpolation results are likely to be inaccurate."
+        )
 
-    logger.info(f'Computing interpolation matrix from {len(pos_good)} sensor positions')
+    logger.info(
+        f"Computing interpolation matrix from {len(pos_good)} sensor positions"
+    )
 
     interpolation = _make_interpolation_matrix(pos_good, pos_bad)
 
@@ -78,8 +87,8 @@ def _make_interpolator(
 
 
 def _interpolate_bads_eeg(
-        epochs: mne.Epochs,
-        bad_channels_by_epoch: list[list[str]],
+    epochs: mne.Epochs,
+    bad_channels_by_epoch: list[list[str]],
 ) -> None:
     """Interpolate bad channels per epoch
 
@@ -94,7 +103,9 @@ def _interpolate_bads_eeg(
     logger = logging.getLogger(__name__)
 
     if len(bad_channels_by_epoch) != len(epochs):
-        raise ValueError(f"Unequal length of epochs ({len(epochs)}) and bad_channels_by_epoch ({len(bad_channels_by_epoch)})")
+        raise ValueError(
+            f"Unequal length of epochs ({len(epochs)}) and bad_channels_by_epoch ({len(bad_channels_by_epoch)})"
+        )
 
     interp_cache = {}
     for i, bad_channels in enumerate(bad_channels_by_epoch):
@@ -106,17 +117,21 @@ def _interpolate_bads_eeg(
         if key in interp_cache:
             goods_idx, bads_idx, interpolation = interp_cache[key]
         else:
-            goods_idx, bads_idx, interpolation = interp_cache[key] = _make_interpolator(epochs, key)
+            goods_idx, bads_idx, interpolation = interp_cache[key] = (
+                _make_interpolator(epochs, key)
+            )
 
         # apply interpolation
-        logger.info(f'Interpolating {bads_idx.sum()} sensors on epoch {i}')
-        epochs._data[i, bads_idx, :] = np.dot(interpolation, epochs._data[i, goods_idx, :])
+        logger.info(f"Interpolating {bads_idx.sum()} sensors on epoch {i}")
+        epochs._data[i, bads_idx, :] = np.dot(
+            interpolation, epochs._data[i, goods_idx, :]
+        )
 
 
 def _interpolate_bads_meg(
-        epochs: mne.Epochs,
-        bad_channels_by_epoch: list[list[str]],
-        interp_cache: dict,
+    epochs: mne.Epochs,
+    bad_channels_by_epoch: list[list[str]],
+    interp_cache: dict,
 ) -> None:
     """Interpolate bad MEG channels per epoch
 
@@ -136,31 +151,39 @@ def _interpolate_bads_meg(
     """
     logger = logging.getLogger(__name__)
     if len(bad_channels_by_epoch) != len(epochs):
-        raise ValueError(f"Unequal length of epochs ({len(epochs)}) and bad_channels_by_epoch ({len(bad_channels_by_epoch)})")
+        raise ValueError(
+            f"Unequal length of epochs ({len(epochs)}) and bad_channels_by_epoch ({len(bad_channels_by_epoch)})"
+        )
 
     import time
+
     logger.debug("starting interpolation")
     t0 = time.time()
 
     # make sure bad_chs includes only existing channels
     all_chs = set(epochs.ch_names)
-    bad_channels_by_epoch = [all_chs.intersection(chs) for chs in
-                             bad_channels_by_epoch]
+    bad_channels_by_epoch = [
+        all_chs.intersection(chs) for chs in bad_channels_by_epoch
+    ]
 
     # find needed interpolators
-    sorted_bad_chs_by_epoch = [tuple(sorted(bad_channels)) for bad_channels in
-                               bad_channels_by_epoch]
+    sorted_bad_chs_by_epoch = [
+        tuple(sorted(bad_channels)) for bad_channels in bad_channels_by_epoch
+    ]
     needed = set(sorted_bad_chs_by_epoch)
     needed.discard(())
     n_keys = len(needed)
     if not n_keys:
         return
-    bads = tuple(sorted(epochs.info['bads']))
+    bads = tuple(sorted(epochs.info["bads"]))
 
     # make sure the cache is based on the correct channels
-    if 'ch_names' not in interp_cache or interp_cache['ch_names'] != epochs.ch_names:
+    if (
+        "ch_names" not in interp_cache
+        or interp_cache["ch_names"] != epochs.ch_names
+    ):
         interp_cache.clear()
-        interp_cache['ch_names'] = epochs.ch_names
+        interp_cache["ch_names"] = epochs.ch_names
 
     # create interpolators
     make_interpolators(interp_cache, needed, bads, epochs)
@@ -172,18 +195,20 @@ def _interpolate_bads_meg(
             continue
         # apply interpolation
         picks_good, picks_bad, interpolation = interp_cache[bads, key]
-        logger.info(f'Interpolating sensors {picks_bad} on epoch {i}')
-        epochs._data[i, picks_bad, :] = interpolation.dot(epochs._data[i, picks_good, :])
+        logger.info(f"Interpolating sensors {picks_bad} on epoch {i}")
+        epochs._data[i, picks_bad, :] = interpolation.dot(
+            epochs._data[i, picks_good, :]
+        )
     t2 = time.time()
 
     logger.debug(f"Interpolation took {t1 - t0}/{t2 - t1} seconds")
 
 
 def make_interpolators(
-        interp_cache: dict,
-        keys: set[tuple[str, ...]],
-        bads: tuple[str, ...],
-        epochs: mne.Epochs,
+    interp_cache: dict,
+    keys: set[tuple[str, ...]],
+    bads: tuple[str, ...],
+    epochs: mne.Epochs,
 ) -> None:
     """Add MEG interpolators for ``keys`` to ``interp_cache`` (keyed by ``(bads, key)``).
 
@@ -202,15 +227,61 @@ def make_interpolators(
     logger = logging.getLogger(__name__)
     logger.debug(f"Making {len(make)} of {len(keys)} interpolators")
     for key in make:
-        picks_good = mne.pick_types(epochs.info, meg=True, ref_meg=False, exclude=key)
+        picks_good = mne.pick_types(
+            epochs.info, meg=True, ref_meg=False, exclude=key
+        )
         picks_bad = mne.pick_channels(epochs.ch_names, key)
-        interpolation = map_meg_channels(epochs, picks_good, picks_bad, 'accurate')
+        interpolation = map_meg_channels(
+            epochs, picks_good, picks_bad, "accurate"
+        )
         interp_cache[bads, key] = picks_good, picks_bad, interpolation
 
 
+def bad_intervals_to_windows(
+    bad_intervals: list[tuple[str, float, float]],
+    sample: int,
+    sfreq: float,
+    tmin: float,
+    tmax: float,
+) -> list[BadChannelWindow]:
+    """Convert raw-absolute bad intervals to one epoch's :class:`BadChannelWindow` list
+
+    Parameters
+    ----------
+    bad_intervals
+        ``(channel, tmin, tmax)`` per-channel bad-time intervals in
+        raw-absolute-sample-clock seconds (as produced by
+        :class:`~eelbrain._experiment.preprocessing.nodes.CleanWindowsDerivative`,
+        i.e. already including ``raw.first_samp``), ``tmax`` exclusive.
+    sample
+        This epoch's trigger sample, in the same absolute-sample-clock
+        convention as ``bad_intervals`` (matches a ``Dataset['sample']`` entry).
+    sfreq
+        Sampling rate in Hz.
+    tmin
+        Epoch start time relative to the trigger, in seconds.
+    tmax
+        Epoch stop time relative to the trigger, in seconds (exclusive).
+
+    Returns
+    -------
+    windows
+        One :class:`BadChannelWindow` per overlapping interval, clipped to
+        ``[tmin, tmax)``. Empty if no interval overlaps the epoch.
+    """
+    event_time = sample / sfreq
+    out = []
+    for ch, t0, t1 in bad_intervals:
+        clipped_tmin = max(t0 - event_time, tmin)
+        clipped_tmax = min(t1 - event_time, tmax)
+        if clipped_tmax > clipped_tmin:
+            out.append(BadChannelWindow(ch, clipped_tmin, clipped_tmax))
+    return out
+
+
 def _window_intervals(
-        windows: list[BadChannelWindow],
-        epochs: mne.Epochs,
+    windows: list[BadChannelWindow],
+    epochs: mne.Epochs,
 ) -> list[tuple[int, int, tuple[str, ...]]]:
     """Decompose one epoch's bad-channel windows into constant-bad-set intervals.
 
@@ -229,7 +300,7 @@ def _window_intervals(
         of channels bad throughout that range (the interpolation cache key).
     """
     t0 = epochs.times[0]
-    sfreq = epochs.info['sfreq']
+    sfreq = epochs.info["sfreq"]
     n_times = len(epochs.times)
     spans = []
     for w in windows:
@@ -240,16 +311,18 @@ def _window_intervals(
     boundaries = sorted({a for _, a, _ in spans} | {b for _, _, b in spans})
     intervals = []
     for a, b in zip(boundaries[:-1], boundaries[1:]):
-        active = tuple(sorted(ch for ch, sa, sb in spans if sa <= a and b <= sb))
+        active = tuple(
+            sorted(ch for ch, sa, sb in spans if sa <= a and b <= sb)
+        )
         if active:
             intervals.append((a, b, active))
     return intervals
 
 
 def _interpolate_bad_windows_eeg(
-        epochs: mne.Epochs,
-        windows_by_epoch: list[list[BadChannelWindow]],
-        max_interpolate: int,
+    epochs: mne.Epochs,
+    windows_by_epoch: list[list[BadChannelWindow]],
+    max_interpolate: int,
 ) -> None:
     """Interpolate bad EEG channels over the time window in which they are bad
 
@@ -270,9 +343,14 @@ def _interpolate_bad_windows_eeg(
         interpolation).
     """
     if len(windows_by_epoch) != len(epochs):
-        raise ValueError(f"Unequal length of epochs ({len(epochs)}) and windows_by_epoch ({len(windows_by_epoch)})")
+        raise ValueError(
+            f"Unequal length of epochs ({len(epochs)}) and windows_by_epoch ({len(windows_by_epoch)})"
+        )
 
-    eeg_chs = {epochs.ch_names[p] for p in mne.pick_types(epochs.info, meg=False, eeg=True, exclude=[])}
+    eeg_chs = {
+        epochs.ch_names[p]
+        for p in mne.pick_types(epochs.info, meg=False, eeg=True, exclude=[])
+    }
     interp_cache = {}
     for i, windows in enumerate(windows_by_epoch):
         windows = [w for w in windows if w.channel in eeg_chs]
@@ -284,14 +362,18 @@ def _interpolate_bad_windows_eeg(
             if key in interp_cache:
                 goods_idx, bads_idx, interpolation = interp_cache[key]
             else:
-                goods_idx, bads_idx, interpolation = interp_cache[key] = _make_interpolator(epochs, key)
-            epochs._data[i, bads_idx, a:b] = np.dot(interpolation, epochs._data[i, goods_idx, a:b])
+                goods_idx, bads_idx, interpolation = interp_cache[key] = (
+                    _make_interpolator(epochs, key)
+                )
+            epochs._data[i, bads_idx, a:b] = np.dot(
+                interpolation, epochs._data[i, goods_idx, a:b]
+            )
 
 
 def _interpolate_bad_windows_meg(
-        epochs: mne.Epochs,
-        windows_by_epoch: list[list[BadChannelWindow]],
-        interp_cache: dict,
+    epochs: mne.Epochs,
+    windows_by_epoch: list[list[BadChannelWindow]],
+    interp_cache: dict,
 ) -> None:
     """Interpolate bad MEG channels over the time window in which they are bad
 
@@ -309,19 +391,31 @@ def _interpolate_bad_windows_meg(
         Will be updated.
     """
     if len(windows_by_epoch) != len(epochs):
-        raise ValueError(f"Unequal length of epochs ({len(epochs)}) and windows_by_epoch ({len(windows_by_epoch)})")
+        raise ValueError(
+            f"Unequal length of epochs ({len(epochs)}) and windows_by_epoch ({len(windows_by_epoch)})"
+        )
 
     # make sure the cache is based on the correct channels
-    if 'ch_names' not in interp_cache or interp_cache['ch_names'] != epochs.ch_names:
+    if (
+        "ch_names" not in interp_cache
+        or interp_cache["ch_names"] != epochs.ch_names
+    ):
         interp_cache.clear()
-        interp_cache['ch_names'] = epochs.ch_names
-    bads = tuple(sorted(epochs.info['bads']))
-    meg_chs = {epochs.ch_names[p] for p in mne.pick_types(epochs.info, meg=True, ref_meg=False)}
+        interp_cache["ch_names"] = epochs.ch_names
+    bads = tuple(sorted(epochs.info["bads"]))
+    meg_chs = {
+        epochs.ch_names[p]
+        for p in mne.pick_types(epochs.info, meg=True, ref_meg=False)
+    }
 
     for i, windows in enumerate(windows_by_epoch):
         windows = [w for w in windows if w.channel in meg_chs]
         intervals = _window_intervals(windows, epochs)
-        make_interpolators(interp_cache, {key for _, _, key in intervals}, bads, epochs)
+        make_interpolators(
+            interp_cache, {key for _, _, key in intervals}, bads, epochs
+        )
         for a, b, key in intervals:
             picks_good, picks_bad, interpolation = interp_cache[bads, key]
-            epochs._data[i, picks_bad, a:b] = interpolation.dot(epochs._data[i, picks_good, a:b])
+            epochs._data[i, picks_bad, a:b] = interpolation.dot(
+                epochs._data[i, picks_good, a:b]
+            )

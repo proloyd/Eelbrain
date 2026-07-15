@@ -3,6 +3,7 @@
 from ._experiment.pipeline import Pipeline
 from ._experiment.preprocessing import (
     RawSource,
+    RawCleanWindows,
     RawFilter,
     RawICA,
     RawMaxwell,
@@ -19,6 +20,7 @@ from ._experiment.epochs import (
     SuperEpoch,
 )
 from ._experiment.epoch_rejection import (
+    BadWindowsRejection,
     ChannelModelRejection,
     EpochRejection,
     ManualRejection,

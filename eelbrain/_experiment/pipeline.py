@@ -65,6 +65,7 @@ from .epochs import (
     decim_param,
 )
 from .epoch_rejection import (
+    BadWindowsRejectionDerivative,
     ChannelModelRejection,
     ChannelModelRejectionDerivative,
     EpochRejection,
@@ -124,7 +125,9 @@ from .preprocessing import (
     RawSourceInput,
     RawICA,
     RawMaxwell,
+    RawCleanWindows,
     Reference,
+    CleanWindowsDerivative,
     REINDEX_ICA,
     assemble_raw_pipes,
     ica_input_name,
@@ -825,6 +828,10 @@ class Pipeline(StateModel):
                     self._derivatives.register(MaxwellCalibrationInput())
                     self._derivatives.register(MaxwellCrosstalkInput())
                     maxwell_registered = True
+                elif isinstance(pipe, RawCleanWindows):
+                    self._derivatives.register(
+                        CleanWindowsDerivative(raw_name, pipe)
+                    )
             else:
                 raise TypeError(f"Unknown raw pipe {pipe}")
         self._derivatives.register(TransInput())
@@ -839,6 +846,9 @@ class Pipeline(StateModel):
         )
         self._derivatives.register(
             RANSACRejectionDerivative(self._epochs, self._epoch_rejection)
+        )
+        self._derivatives.register(
+            BadWindowsRejectionDerivative(self._epochs, self._epoch_rejection)
         )
 
         # --- Predictors and TRFs ---

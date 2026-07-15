@@ -10,8 +10,9 @@ Dependency structure:
     │           │     ├── events-input   (BIDS sidecar, preferred when present)
     │           │     └── events         (trigger-based fallback)
     │           └── rejection            (epoch-rejection-input | epoch-rejection-channel-model |
-    │                                      epoch-rejection-ransac; only when epoch_rejection is
-    │                                      set and reject != False)
+    │                                      epoch-rejection-bad-windows | epoch-rejection-ransac;
+    │                                      only when epoch_rejection is set and reject != False)
+    │                                      
     │
     ├── PrimaryEpoch (combine runs: run=None and multiple runs exist)
     │     └── selected-events  ×N  (one per run)
@@ -47,7 +48,8 @@ Dependency structure:
     rejection, and bad-channel annotations for a single raw recording file.
     Always restricted to one task/run combination.  Adds the rejection node
     (``epoch-rejection-input`` for a manual rejection, ``epoch-rejection-ransac``
-    for a :class:`~epoch_rejection.RANSACRejection`, or
+    for a :class:`~epoch_rejection.RANSACRejection`, or``epoch-rejection-bad-windows``
+    for a :class:`~epoch_rejection.BadWindowsRejection`, or
     ``epoch-rejection-channel-model`` for any other automatic rejection) as a
     dependency when epoch rejection is active (``epoch_rejection`` is set and
     ``reject`` is not ``False``).
@@ -91,7 +93,12 @@ from .derivative_cache import (
     UncachedDerivative,
     file_fingerprint,
 )
-from .epoch_rejection import EpochRejection, ManualRejection, RANSACRejection
+from .epoch_rejection import (
+    BadWindowsRejection,
+    EpochRejection,
+    ManualRejection,
+    RANSACRejection
+)
 from .epochs import (
     EPOCH_EXTRACT_OPTIONS,
     EpochCollection,
@@ -441,6 +448,8 @@ class SelectedEventsDerivative(UncachedDerivative[Dataset]):
                     node = "epoch-rejection-input"
                 elif isinstance(rejection_params, RANSACRejection):
                     node = "epoch-rejection-ransac"
+                elif isinstance(rejection_params, BadWindowsRejection):
+                    node = "epoch-rejection-bad-windows"
                 else:
                     node = "epoch-rejection-channel-model"
                 deps.append(Dependency(node, label="rejection", state=state))
