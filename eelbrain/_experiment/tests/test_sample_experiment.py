@@ -1020,6 +1020,90 @@ def test_channel_model_rejection_variable_length(samples_experiment):
 
 
 @requires_mne_sample_data
+def test_rejection_by_clean_windows(samples_experiment):
+    "BadWindowsRejection: RawCleanWindows raw pipe feeding time-windowed interpolation"
+    set_log_level('warning', 'mne')
+    from eelbrain._experiment.tests.sample_experiment import SampleExperiment
+    from eelbrain._info import INTERPOLATE_WINDOWS, INTERPOLATE_WINDOWS_MAX
+    from eelbrain._meeg import BadChannelWindow
+
+    root = samples_experiment(1, 1, pick='')  # keep EEG channels
+
+    class Experiment(SampleExperiment):
+        raw = {
+            **SampleExperiment.raw,
+            'windows': RawCleanWindows('raw', window_len=0.5, zthresholds=(-2.0, 2.0)),
+        }
+        epoch_rejection = {'auto': BadWindowsRejection(raw='windows', max_interpolate=2)}
+
+    e = Experiment(root)
+    # the epoch is cut from 'raw', independent of 'windows' (where the bad
+    # windows are detected) -- exercises BadWindowsRejection.raw != epoch raw
+    e.set(subject='R0000', epoch='target', raw='raw', epoch_rejection='auto')
+
+    # the cached RawCleanWindows companion node produces raw-absolute,
+    # per-channel intervals
+    windows_ctx = e._resolve_derivative('clean-windows@windows')
+    bad_intervals = windows_ctx.load()
+    assert len(bad_intervals) > 0
+    assert all(isinstance(ch, str) and t1 > t0 for ch, t0, t1 in bad_intervals)
+
+    ctx = e._resolve_derivative('epoch-rejection-bad-windows')
+    rej_ds = ctx.load()
+    assert INTERPOLATE_WINDOWS in rej_ds
+    windows = rej_ds[INTERPOLATE_WINDOWS]
+    assert all(isinstance(w, BadChannelWindow) for epoch_windows in windows for w in epoch_windows)
+    n_windows = sum(len(epoch_windows) for epoch_windows in windows)
+    assert n_windows > 0  # zthresholds loose enough to flag something
+    assert rej_ds['accept'].x.all()  # windowed detection never rejects wholesale
+    # second resolve is a cache hit (no rebuild)
+    assert e._resolve_derivative('epoch-rejection-bad-windows').is_valid()
+
+    # end-to-end: interpolation runs and only touches samples inside the windows
+    ds0 = e.load_epochs(interpolate_bads=True, baseline=False, epoch_rejection='')
+    ds1 = e.load_epochs(interpolate_bads=True, baseline=False, epoch_rejection='auto')
+    assert ds1.n_cases == ds0.n_cases
+    max_interpolate = rej_ds.info[INTERPOLATE_WINDOWS_MAX]
+    changed = zeroed_any = False
+    for y0, y1, epoch_windows in zip(ds0['eeg'], ds1['eeg'], windows):
+        bad_by_channel = {}
+        for w in epoch_windows:
+            bad_by_channel.setdefault(w.channel, []).append((w.tmin, w.tmax))
+        if not bad_by_channel:
+            assert_array_equal(y0.x, y1.x)
+            continue
+        # match the sample-rounding convention _window_intervals uses internally
+        t0, sfreq = y0.time.times[0], 1. / y0.time.tstep
+
+        def _mask(spans):
+            m = np.zeros(y0.time.nsamples, bool)
+            for tmin, tmax in spans:
+                a = max(0, int(round((tmin - t0) * sfreq)))
+                b = min(y0.time.nsamples, int(round((tmax - t0) * sfreq)))
+                m[a:b] = True
+            return m
+
+        # per-sample count of simultaneously bad channels -> intervals with
+        # more than max_interpolate are zeroed across all channels instead of
+        # spline-interpolated (see _interpolate_bad_windows_eeg)
+        n_bad = np.zeros(y0.time.nsamples, int)
+        for spans in bad_by_channel.values():
+            n_bad += _mask(spans)
+        zeroed = n_bad > max_interpolate
+        if zeroed.any():
+            zeroed_any = True
+            assert_array_equal(y1.x[:, zeroed], 0.)
+        for ci, ch in enumerate(y0.sensor.names):
+            inside = _mask(bad_by_channel.get(ch, []))
+            unchanged = ~inside & ~zeroed
+            assert_array_equal(y0.x[ci, unchanged], y1.x[ci, unchanged])
+            if inside.any() and not np.array_equal(y0.x[ci, inside], y1.x[ci, inside]):
+                changed = True
+    assert changed
+    assert zeroed_any
+
+
+@requires_mne_sample_data
 def test_evoked_backed_test_vars_are_post_aggregation_only(samples_experiment):
     set_log_level('warning', 'mne')
     from eelbrain._experiment.tests.sample_experiment import SampleExperiment

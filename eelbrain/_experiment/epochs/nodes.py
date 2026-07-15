@@ -455,7 +455,7 @@ class EpochsDerivative(UncachedDerivative[Dataset]):
                 baseline = epoch.baseline
             if baseline:
                 if ds.info.get(INTERPOLATE_WINDOWS, False):
-                    raise NotImplementedError(f"Baseline correction together with ChannelModelRejection for epoch {epoch.name!r}: time-windowed interpolation sets data segments with too many bad channels to zero before baseline correction, and baseline correction would assign these segments non-zero values; load with baseline=False")
+                    raise NotImplementedError(f"Baseline correction together with time-windowed epoch rejection (e.g. ChannelModelRejection, BadWindowsRejection) for epoch {epoch.name!r}: time-windowed interpolation sets data segments with too many bad channels to zero before baseline correction, and baseline correction would assign these segments non-zero values; load with baseline=False")
                 if variable_tmax:
                     for epochs in epochs_list:
                         epochs.apply_baseline(baseline)
@@ -642,7 +642,7 @@ class EvokedDerivative(Derivative[list[mne.Evoked]]):
                 baseline = epoch.baseline
             if baseline:
                 if ds.info.get(INTERPOLATE_WINDOWS, False):
-                    raise NotImplementedError(f"Baseline correction together with ChannelModelRejection for epoch {epoch.name!r}: time-windowed interpolation sets data segments with too many bad channels to zero before baseline correction, and baseline correction would assign these segments non-zero values; load with baseline=False")
+                    raise NotImplementedError(f"Baseline correction together with time-windowed epoch rejection (e.g. ChannelModelRejection, BadWindowsRejection) for epoch {epoch.name!r}: time-windowed interpolation sets data segments with too many bad channels to zero before baseline correction, and baseline correction would assign these segments non-zero values; load with baseline=False")
                 for evoked_i in evoked:
                     evoked_i.apply_baseline(epoch.baseline)
 

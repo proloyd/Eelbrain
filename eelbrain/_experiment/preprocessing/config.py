@@ -82,6 +82,10 @@ def ica_input_name(raw: str) -> str:
     return f'ica-input@{raw}'
 
 
+def clean_windows_input_name(raw: str) -> str:
+    return f'clean-windows@{raw}'
+
+
 class RawSource(RawPipe):
     """Raw data source
 
@@ -309,6 +313,95 @@ class RawFilter(CachedRawPipe):
             with info._unlock():
                 info['lowpass'] = float(self.h_freq)
         return info
+
+
+class RawCleanWindows(CachedRawPipe):
+    """Detect abnormal-power time windows (:func:`eelbrain._meeg._clean_windows.clean_windows`)
+
+    This pipe never modifies the raw signal; :meth:`_make` is a passthrough.
+    Detection happens once per recording in a cached companion node (see
+    :class:`~eelbrain._experiment.preprocessing.nodes.CleanWindowsDerivative`),
+    and the resulting bad time windows are exposed to epoch rejection through
+    :class:`~eelbrain._experiment.epoch_rejection.BadWindowsRejection`
+    (``raw=<name of this pipe>``), which converts them to
+    :class:`~eelbrain._meeg.base.BadChannelWindow` objects for the existing
+    time-resolved interpolation machinery.
+
+    Parameters
+    ----------
+    source
+        Name of the raw pipe to use for input data.
+    max_bad_channels
+        Max fraction (< 1) or count (≥ 1) of bad channels allowed per
+        retained window. Default 0.2 (20 %).
+    zthresholds
+        ``(z_low, z_high)`` power z-score tolerances. Windows with a channel
+        outside this range count toward ``max_bad_channels``.
+    window_len
+        Window length in seconds. Default 1.
+    window_overlap
+        Fraction of overlap between successive windows. Default 0.66.
+    max_dropout_fraction
+        Max fraction of windows allowed to have near-zero amplitude. Default 0.1.
+    min_clean_fraction
+        Min fraction of windows expected to be artifact-free. Default 0.25.
+    truncate_quant
+        Quantile range for the truncated GGD fit. Default ``(0.022, 0.6)``.
+    step_sizes
+        Grid-search step sizes for distribution fitting. Default ``(0.01, 0.01)``.
+    picks
+        Channel selection passed to :meth:`~mne.io.Raw.get_data`. Default ``"eeg"``.
+    cache
+        Cache the resulting raw files (default ``True``).
+
+    See Also
+    --------
+    Pipeline.raw
+    """
+    DICT_ATTRS = CachedRawPipe.DICT_ATTRS + (
+        'max_bad_channels', 'zthresholds', 'window_len', 'window_overlap',
+        'max_dropout_fraction', 'min_clean_fraction', 'truncate_quant',
+        'step_sizes', 'picks',
+    )
+
+    def __init__(
+            self,
+            source: str,
+            max_bad_channels: float = 0.2,
+            zthresholds: tuple[float, float] = (-3.5, 5.0),
+            window_len: float = 1.0,
+            window_overlap: float = 0.66,
+            max_dropout_fraction: float = 0.1,
+            min_clean_fraction: float = 0.25,
+            truncate_quant: tuple[float, float] = (0.022, 0.6),
+            step_sizes: tuple[float, float] = (0.01, 0.01),
+            picks: str | list[str] | None = 'eeg',
+            cache: bool = True,
+    ):
+        CachedRawPipe.__init__(self, source, cache)
+        self.max_bad_channels = max_bad_channels
+        self.zthresholds = zthresholds
+        self.window_len = window_len
+        self.window_overlap = window_overlap
+        self.max_dropout_fraction = max_dropout_fraction
+        self.min_clean_fraction = min_clean_fraction
+        self.truncate_quant = truncate_quant
+        self.step_sizes = step_sizes
+        self.picks = picks
+
+    def _make(
+            self,
+            raw: mne.io.BaseRaw,
+            *,
+            path: BIDSPath,
+            noise: bool = False,
+            raw_name: str = None,
+            log: logging.Logger | None = None,
+            source_pipe: RawSource | None = None,
+    ) -> mne.io.BaseRaw:
+        # Detection happens in the companion CleanWindowsDerivative node, not
+        # here — this step never mutates the raw signal.
+        return raw
 
 
 class RawFilterElliptic(CachedRawPipe):
