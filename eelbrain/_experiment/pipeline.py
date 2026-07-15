@@ -40,7 +40,7 @@ from .epochs import (
     EvokedGroupDatasetDerivative, PrimaryEpoch, SecondaryEpoch,
     SuperEpoch, assemble_epochs, decim_param,
 )
-from .epoch_rejection import ChannelModelRejection, ChannelModelRejectionDerivative, EpochRejection, ManualRejection, RejectionInput
+from .epoch_rejection import BadWindowsRejectionDerivative, ChannelModelRejection, ChannelModelRejectionDerivative, EpochRejection, ManualRejection, RejectionInput
 from .events import EpochEventsDerivative, EventsDerivative, EventsInput, LabeledEventsDerivative, SelectedEventsDerivative
 from .exceptions import FileMissingError, ICAChannelsChangedError
 from .logging import CACHE_EVENT_COLUMNS, StructuredFormatter
@@ -53,8 +53,8 @@ from .pathing import (
 )
 from .parc import SEEDED_PARC_RE, AnnotDerivative, CombinationParc, EelbrainParc, FreeSurferParc, FSAverageParc, IndividualSeededParc, LabelParc, Parcellation, SeededParc, VolumeParc, _resolve_parc
 from .preprocessing import (
-    CachedRawPipe, ICAInput, MaxwellCalibrationInput, MaxwellCrosstalkInput, CanonicalHeadPositionDerivative, RawBadChannelsInput, RawDerivative, RawHeadPositionDerivative, RawPipe, RawSource, RawSourceDerivative, RawSourceInput, RawICA, RawMaxwell, Reference,
-    REINDEX_ICA, assemble_raw_pipes, ica_input_name, raw_bad_channels_input_name, raw_node_name, raw_input_name,
+    CachedRawPipe, ICAInput, MaxwellCalibrationInput, MaxwellCrosstalkInput, CanonicalHeadPositionDerivative, RawBadChannelsInput, RawDerivative, RawHeadPositionDerivative, RawPipe, RawSource, RawSourceDerivative, RawSourceInput, RawICA, RawMaxwell, RawCleanWindows, Reference,
+    CleanWindowsDerivative, REINDEX_ICA, assemble_raw_pipes, ica_input_name, raw_bad_channels_input_name, raw_node_name, raw_input_name,
 )
 from .data import DataSpec
 from .source import (
@@ -534,12 +534,15 @@ class Pipeline(StateModel):
                     self._derivatives.register(MaxwellCalibrationInput())
                     self._derivatives.register(MaxwellCrosstalkInput())
                     maxwell_registered = True
+                elif isinstance(pipe, RawCleanWindows):
+                    self._derivatives.register(CleanWindowsDerivative(raw_name, pipe))
             else:
                 raise TypeError(f"Unknown raw pipe {pipe}")
         self._derivatives.register(TransInput())
         self._derivatives.register(BemInput())
         self._derivatives.register(RejectionInput(self.root, self._epoch_rejection, self._epochs))
         self._derivatives.register(ChannelModelRejectionDerivative(self._epochs, self._epoch_rejection))
+        self._derivatives.register(BadWindowsRejectionDerivative(self._epochs, self._epoch_rejection))
 
         # --- Predictors and TRFs ---
         self._derivatives.register(PredictorInput(self.root, self.predictors))
