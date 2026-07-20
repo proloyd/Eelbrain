@@ -113,7 +113,7 @@ class EventsInput(Input[Dataset]):
 
     The file is expected to follow the BIDS specification with at least the
     columns ``onset`` (seconds), ``sample`` (integer sample index), and
-    ``value`` (integer trigger code).  Additional columns are passed through
+    ``value`` (trigger code, interger or strings).  Additional columns are passed through
     to the returned :class:`~eelbrain.Dataset` so that they are available in
     :meth:`~Pipeline.label_events`.  Columns default to :class:`~eelbrain.Var`
     when their values are numeric; columns listed in
