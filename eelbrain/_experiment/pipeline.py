@@ -154,7 +154,7 @@ def _session_log_file(log_dir: Path, name: str, initialized: datetime) -> Path:
         for path in log_dir.iterdir():
             if path.suffix != ".log" or not path.stem.startswith(prefix):
                 continue
-            session, separator, time = path.stem[len(prefix) :].partition("-")
+            session, separator, time = path.stem[len(prefix):].partition("-")
             if (
                 separator
                 and session.isdecimal()

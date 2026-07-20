@@ -86,7 +86,7 @@ from mne_bids import BIDSPath
 from .. import load, save
 from .._data_obj import Datalist, Dataset, Factor, Var, combine
 from .._exceptions import ConfigurationError
-from .._info import BAD_CHANNELS, INTERPOLATE_CHANNELS, INTERPOLATE_WINDOWS, INTERPOLATE_WINDOWS_MAX, merge_info
+from .._info import INTERPOLATE_CHANNELS, INTERPOLATE_WINDOWS, INTERPOLATE_WINDOWS_MAX, merge_info
 from .derivative_cache import CachePolicy, Dependency, Derivative, Input, Request, UncachedDerivative, file_fingerprint
 from .epoch_rejection import RANSACRejection, BadWindowsRejection, EpochRejection, ManualRejection
 from .epochs import EPOCH_EXTRACT_OPTIONS, EpochCollection, SecondaryEpoch, SuperEpoch, PrimaryEpoch, ContinuousEpoch, single_recording_run
