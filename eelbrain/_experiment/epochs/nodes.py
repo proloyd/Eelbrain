@@ -34,13 +34,12 @@ from typing import Any
 from collections.abc import Sequence
 import shutil
 import warnings
-import zlib
 
 import mne
 import numpy as np
 
 from ... import load
-from ..._data_obj import Datalist, Dataset, Factor, Var, combine
+from ..._data_obj import Datalist, Dataset, combine
 from ..._exceptions import ConfigurationError
 from ..._info import INTERPOLATE_CHANNELS, INTERPOLATE_WINDOWS, INTERPOLATE_WINDOWS_MAX
 from ..._mne import shift_mne_epoch_trigger
@@ -77,27 +76,6 @@ def _drop_bad_eeg_channels_with_missing_locs(
 
 def _evoked_comments(evoked: list[mne.Evoked]) -> list[str]:
     return [e.comment or 'No comment' for e in evoked]
-
-
-def _factor_trigger_to_var(factor: Factor) -> Var:
-    """Numeric trigger codes for a Factor, stable across recordings.
-
-    MNE events require a numeric (``int32``) trigger/event-ID column, but a
-    pipeline's ``value`` column can end up as a :class:`Factor` (e.g. via
-    :meth:`~Pipeline.label_events` or a :class:`~variable_def.LabelVar`).
-    Each label's code is derived from the label's own text (CRC32), not from
-    which other values happen to co-occur in a given recording, so the same
-    label always maps to the same code across different runs/recordings
-    without requiring a shared/external registry.
-    """
-    code_of = {}
-    x = np.empty(len(factor), dtype=np.int64)
-    for i, label in enumerate(factor):
-        if label not in code_of:
-            # mask to a non-negative value that fits in int32
-            code_of[label] = zlib.crc32(label.encode()) & 0x7FFFFFFF
-        x[i] = code_of[label]
-    return Var(x)
 
 
 # save/load one or multiple epochs objects
@@ -231,14 +209,13 @@ class RecordingEpochsDerivative(Derivative[Any]):
         tmin, tmax, tstop, decim, variable_tmax = epoch._extraction_parameters(ds, ctx.options)
         # Baseline correction is deferred to a view operation and must not enter the cache,
         # except for post_baseline_trigger_shift epochs where it has to precede the shift.
-        _trigger = ds["value"]
-        if isinstance(_trigger, Factor):
-            _trigger = _factor_trigger_to_var(_trigger)
+        # A Factor-valued 'value' (e.g. from label_events) is converted to a
+        # stable numeric trigger + matching event_id automatically.
         if variable_tmax:
-            epochs_list = load.mne.variable_length_mne_epochs(ds, tmin, tmax, None, allow_truncation=True, decim=decim, reject_by_annotation=False, i_start="sample", trigger=_trigger,)
+            epochs_list = load.mne.variable_length_mne_epochs(ds, tmin, tmax, None, allow_truncation=True, decim=decim, reject_by_annotation=False, i_start="sample", trigger=ds["value"],)
             epoch_value = Datalist(epochs_list, "epochs")
         else:
-            epochs = load.mne.mne_epochs(ds, tmin, tmax, None, i_start='sample', decim=decim, drop_bad_chs=False, tstop=tstop, reject_by_annotation=False, trigger=_trigger,)
+            epochs = load.mne.mne_epochs(ds, tmin, tmax, None, i_start='sample', decim=decim, drop_bad_chs=False, tstop=tstop, reject_by_annotation=False, trigger=ds["value"],)
             if epoch.post_baseline_trigger_shift:
                 # Apply baseline before the trigger shift, on the (projected) epoch data, to
                 # match the deferred view baseline (which also acts on projected data).

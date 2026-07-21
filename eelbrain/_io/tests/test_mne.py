@@ -8,8 +8,19 @@ import numpy as np
 from numpy.testing import assert_array_equal, assert_array_almost_equal
 import pytest
 
-from eelbrain import datasets, load
+from eelbrain import Dataset, Factor, Var, datasets, load
+from eelbrain._io.fiff import _factor_trigger_to_var
 from eelbrain.testing import assert_dataobj_equal, requires_mne_sample_data, requires_mne_testing_data, file_path
+
+
+def _synthetic_raw_and_events():
+    info = mne.create_info(['Fp', 'Cz'], 100., ['eeg', 'eeg'])
+    raw = mne.io.RawArray(np.random.randn(2, 2000), info)
+    ds = Dataset()
+    ds['i_start'] = Var([100, 300, 500])
+    ds['trigger'] = Var([1, 2, 1])
+    ds.info['raw'] = raw
+    return ds
 
 
 def test_load_events():
@@ -115,6 +126,139 @@ def test_epochs_ndvar_ignores_bad_channels_for_auto_adjacency():
     ndvar = load.mne.epochs_ndvar(epochs, data='eeg')
 
     assert tuple(ndvar.sensor.names) == ('Fz', 'Cz', 'Pz')
+
+
+def test_mne_epochs_event_id():
+    "event_id is passed through to the resulting mne.Epochs unchanged"
+    ds = _synthetic_raw_and_events()
+    event_id = {'a': 1, 'b': 2}
+    epochs = load.mne.mne_epochs(ds, -0.05, 0.05, event_id=event_id)
+    assert epochs.event_id == event_id
+
+
+def test_mne_epochs_no_event_id():
+    "without event_id, mne_epochs keeps mne's own default behavior"
+    ds = _synthetic_raw_and_events()
+    epochs = load.mne.mne_epochs(ds, -0.05, 0.05)
+    assert epochs.event_id == {'1': 1, '2': 2}
+
+
+def test_variable_length_mne_epochs_event_id():
+    """Each epoch's event_id only keeps the entry matching its own trigger
+    code (mne.Epochs requires every event_id value to have a matching event,
+    which fails for a single-epoch call if unrelated labels are included).
+    """
+    ds = _synthetic_raw_and_events()
+    ds['sample'] = ds.pop('i_start')
+    event_id = {'a': 1, 'b': 2}
+    epochs_list = load.mne.variable_length_mne_epochs(ds, -0.05, tstop=[0.05, 0.05, 0.05], i_start='sample', event_id=event_id)
+    assert [epochs.event_id for epochs in epochs_list] == [{'a': 1}, {'b': 2}, {'a': 1}]
+
+
+def test_variable_length_mne_epochs_no_event_id():
+    "without event_id, variable_length_mne_epochs keeps mne's own default"
+    ds = _synthetic_raw_and_events()
+    ds['sample'] = ds.pop('i_start')
+    epochs_list = load.mne.variable_length_mne_epochs(ds, -0.05, tstop=[0.05, 0.05, 0.05], i_start='sample')
+    assert [epochs.event_id for epochs in epochs_list] == [{'1': 1}, {'2': 2}, {'1': 1}]
+
+
+def test_mne_epochs_factor_trigger_auto_event_id():
+    "A Factor-valued trigger is converted to a numeric code + event_id automatically"
+    ds = _synthetic_raw_and_events()
+    ds['trigger'] = Factor(['a', 'b', 'a'])
+    epochs = load.mne.mne_epochs(ds, -0.05, 0.05)
+    assert set(epochs.event_id) == {'a', 'b'}
+    assert epochs.events[:, 2].dtype == np.int32
+    assert (epochs.events[:, 2] >= 0).all()
+
+
+def test_mne_epochs_factor_trigger_explicit_event_id_wins():
+    "An explicit event_id's codes are used instead of the auto-derived ones"
+    ds = _synthetic_raw_and_events()
+    ds['trigger'] = Factor(['a', 'b', 'a'])
+    event_id = {'a': 1, 'b': 2}
+    epochs = load.mne.mne_epochs(ds, -0.05, 0.05, event_id=event_id)
+    assert epochs.event_id == event_id
+    assert_array_equal(epochs.events[:, 2], [1, 2, 1])
+
+
+def test_variable_length_mne_epochs_factor_trigger_auto_event_id():
+    "A Factor-valued trigger is converted automatically for variable-length epochs too"
+    ds = _synthetic_raw_and_events()
+    ds['sample'] = ds.pop('i_start')
+    ds['trigger'] = Factor(['a', 'b', 'a'])
+    epochs_list = load.mne.variable_length_mne_epochs(ds, -0.05, tstop=[0.05, 0.05, 0.05], i_start='sample')
+    assert [set(epochs.event_id) for epochs in epochs_list] == [{'a'}, {'b'}, {'a'}]
+
+
+def test_factor_trigger_to_var_is_numeric():
+    "Result is a numeric Var, safe to use as an MNE (int32) event code"
+    factor = Factor(['a', 'b', 'a', 'c'])
+    var, event_id = _factor_trigger_to_var(factor)
+    assert isinstance(var, Var)
+    assert len(var) == len(factor)
+    assert var.x.dtype.kind in 'iu'
+    # fits in a signed int32 event-ID column
+    assert (var.x >= 0).all()
+    assert (var.x <= 2 ** 31 - 1).all()
+    assert isinstance(event_id, dict)
+
+
+def test_factor_trigger_to_var_same_label_same_code():
+    "The same label always gets the same code within one Factor"
+    factor = Factor(['a', 'b', 'a', 'c', 'b'])
+    var, event_id = _factor_trigger_to_var(factor)
+    by_label = {}
+    for label, code in zip(factor, var.x):
+        by_label.setdefault(label, set()).add(code)
+    assert all(len(codes) == 1 for codes in by_label.values())
+    # distinct labels never collide with each other here
+    assert len({next(iter(codes)) for codes in by_label.values()}) == len(by_label)
+
+
+def test_factor_trigger_to_var_stable_across_recordings():
+    """A label's code does not depend on which other labels/values are
+    present in that particular Factor -- i.e. it doesn't matter that Run B
+    is missing some of the trigger values seen in Run A (e.g. no button
+    presses happened to occur in that recording).
+    """
+    labels = {32: 'button', 5: 'smiley', 1: 'a', 2: 'b', 3: 'c', 4: 'd'}
+
+    # Run A: all six triggers occur
+    factor_a = Factor(Var(np.array([1, 2, 3, 4, 5, 32])), labels=labels)
+    var_a, event_id_a = _factor_trigger_to_var(factor_a)
+    code_a = dict(zip(factor_a, var_a.x))
+
+    # Run B: only a subset of triggers occurs (e.g. no 'button', no 'd')
+    factor_b = Factor(Var(np.array([1, 2, 3, 5])), labels=labels)
+    var_b, event_id_b = _factor_trigger_to_var(factor_b)
+    code_b = dict(zip(factor_b, var_b.x))
+
+    for label in code_b:
+        assert code_b[label] == code_a[label]
+        # the event_id mapping (used for mne.Epochs.event_id) agrees too
+        assert event_id_b[label] == event_id_a[label]
+
+
+def test_factor_trigger_to_var_empty():
+    "Empty Factor -> empty Var, no crash"
+    factor = Factor([])
+    var, event_id = _factor_trigger_to_var(factor)
+    assert len(var) == 0
+    assert event_id == {}
+
+
+def test_factor_trigger_to_var_event_id_matches_var():
+    """The label -> code dict returned alongside the Var is a valid
+    mne.Epochs event_id: every code in the Var appears under its own
+    label, and no other codes are present.
+    """
+    factor = Factor(['a', 'b', 'a', 'c'])
+    var, event_id = _factor_trigger_to_var(factor)
+    assert set(event_id) == set(factor.cells)
+    for label, code in zip(factor, var.x):
+        assert event_id[label] == code
 
 
 @requires_mne_sample_data

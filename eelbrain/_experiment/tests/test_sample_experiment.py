@@ -1431,9 +1431,15 @@ def test_recording_epochs_factor_valued_trigger(samples_experiment):
     assert ds_factor.n_cases == ds_baseline.n_cases
     assert_array_equal(ds_factor['mag'].x, ds_baseline['mag'].x)
 
-    events = e_factor._resolve_derivative('recording-epochs').load().events
+    epochs_factor = e_factor._resolve_derivative('recording-epochs').load()
+    events = epochs_factor.events
     assert events.dtype == np.int32
     assert (events[:, 2] >= 0).all()
+    # event_id preserves the original Factor labels, for code that works
+    # with the raw mne.Epochs independently of the enclosing Dataset
+    assert set(epochs_factor.event_id) == set(ds_factor['value'])
+    for label, code in epochs_factor.event_id.items():
+        assert (events[ds_factor['value'] == label, 2] == code).all()
 
     # variable-length epochs (the variable_tmax branch)
     e_factor.set(epoch='varlen')
@@ -1447,6 +1453,9 @@ def test_recording_epochs_factor_valued_trigger(samples_experiment):
 
     events_list = e_factor._resolve_derivative('recording-epochs').load()
     assert all(epochs.events.dtype == np.int32 for epochs in events_list)
+    # each single-trial mne.Epochs keeps only the entry for its own label
+    for epochs, label in zip(events_list, ds_factor['value']):
+        assert epochs.event_id == {label: epochs.events[0, 2]}
 
 
 @requires_mne_sample_data
