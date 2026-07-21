@@ -13,6 +13,7 @@ import re
 from typing import Any, Literal
 from collections.abc import Sequence
 import warnings
+import zlib
 
 import mne
 from mne.source_estimate import _BaseSourceEstimate
@@ -609,6 +610,51 @@ def add_mne_epochs(
     return ds
 
 
+def _factor_trigger_to_var(factor: Factor) -> tuple[Var, dict[str, int]]:
+    """Numeric trigger codes for a Factor, stable across recordings.
+
+    MNE events require a numeric (``int32``) trigger/event-ID column, but a
+    pipeline's trigger column can end up as a :class:`Factor` (e.g. via
+    :meth:`~Pipeline.label_events` or a :class:`~variable_def.LabelVar`).
+    Each label's code is derived from the label's own text (CRC32), not from
+    which other values happen to co-occur in a given recording, so the same
+    label always maps to the same code across different runs/recordings
+    without requiring a shared/external registry.
+
+    Also returns the label -> code mapping, for use as the ``event_id`` of
+    the resulting :class:`mne.Epochs`, so the original string labels remain
+    available to code that works with the raw ``mne.Epochs`` object directly.
+    """
+    code_of = {}
+    x = np.empty(len(factor), dtype=np.int64)
+    for i, label in enumerate(factor):
+        if label not in code_of:
+            # mask to a non-negative value that fits in int32
+            code_of[label] = zlib.crc32(label.encode()) & 0x7FFFFFFF
+        x[i] = code_of[label]
+    return Var(x), code_of
+
+
+def _resolve_trigger(ds, trigger, event_id):
+    """Resolve a trigger spec to a numeric trigger plus a matching event_id.
+
+    A Factor-valued trigger (e.g. from a pipeline's label_events overwriting
+    'value' with string labels) is not directly usable as an MNE event code.
+    If the caller already supplied an explicit event_id, its label -> code
+    mapping is used (every label present in the Factor must be a key);
+    otherwise both the numeric trigger and the event_id are derived from the
+    Factor's own labels.
+    """
+    if isinstance(trigger, str):
+        trigger = ds[trigger]
+    if isinstance(trigger, Factor):
+        if event_id is None:
+            trigger, event_id = _factor_trigger_to_var(trigger)
+        else:
+            trigger = Var([event_id[label] for label in trigger])
+    return trigger, event_id
+
+
 def _mne_events(ds=None, i_start='i_start', trigger='trigger'):
     """Convert events from a Dataset into mne events"""
     if isinstance(i_start, str):
@@ -638,9 +684,10 @@ def mne_epochs(
         drop_bad_chs: bool = True,
         picks: Sequence[str] = None,
         reject: float = None,
-        tstop: float = None,
         decim: int = 1,
+        tstop: float = None,
         trigger: str = 'trigger',
+        event_id: dict = None,
         **kwargs,
 ):
     """Load epochs as :class:`mne.Epochs`.
@@ -661,14 +708,12 @@ def mne_epochs(
         ``None`` for no baseline correction (default).
     i_start
         Name of the variable containing the sample index of each event.
-    trigger
-        Name of the variable containing the integer event ID (trigger code).
     raw
         If None, ds.info['raw'] is used.
     drop_bad_chs
         Drop all channels in raw.info['bads'] form the Epochs. This argument is
         ignored if the picks argument is specified.
-    picks, reject
+    picks, reject, decim
         :class:`mne.Epochs` parameters.
     tstop
         Alternative to ``tmax``. While ``tmax`` specifies the last samples to
@@ -677,6 +722,18 @@ def mne_epochs(
         For example, at 100 Hz the epoch with ``tmin=-0.1, tmax=0.4`` will have
         51 samples, while the epoch specified with ``tmin=-0.1, tstop=0.4`` will
         have 50 samples.
+        If this variable is a :class:`~eelbrain._data_obj.Factor` (e.g. from
+        a pipeline's ``label_events``), it is converted to a stable numeric
+        code automatically (see ``event_id``).
+    trigger
+        Name of the variable containing the integer event ID (trigger code).
+    event_id : dict | None
+        Mapping from condition label to trigger code, stored on the
+        resulting :class:`mne.Epochs` as its ``event_id`` (passed through to
+        :class:`mne.Epochs`). If ``None`` and ``trigger`` resolves to a
+        :class:`~eelbrain._data_obj.Factor`, this is derived automatically
+        from the Factor's own labels; otherwise MNE derives its own from the
+        trigger codes.
     ...
         :class:`mne.Epochs` parameters.
     """
@@ -698,10 +755,11 @@ def mne_epochs(
     if drop_bad_chs and picks is None and raw.info['bads']:
         picks = mne.pick_types(raw.info, meg=True, eeg=True, eog=True, ref_meg=False)
 
+    trigger, event_id = _resolve_trigger(ds, trigger, event_id)
     events = _mne_events(ds=ds, i_start=i_start, trigger=trigger)
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', 'The events passed to the Epochs constructor', RuntimeWarning)
-        epochs = mne.Epochs(raw, events, None, tmin, tmax, baseline, picks, preload=True, reject=reject, decim=decim, **kwargs)
+        epochs = mne.Epochs(raw, events, event_id, tmin, tmax, baseline, picks, preload=True, reject=reject, decim=decim, **kwargs)
     if reject is None and len(epochs) != len(events):
         getLogger('eelbrain').warning("%s: MNE generated only %i Epochs for %i events. The raw file might end before the end of the last epoch.", raw.filenames[0], len(epochs), len(events))
 
@@ -978,6 +1036,7 @@ def variable_length_mne_epochs(
         decim: int = 1,
         i_start: str = 'i_start',
         trigger: str = 'trigger',
+        event_id: dict[str, int] = None,
         **kwargs,
 ) -> list[mne.Epochs]:
     """Load mne Epochs where each epoch has a different length
@@ -1021,6 +1080,17 @@ def variable_length_mne_epochs(
         Name of the variable containing the sample index of each event.
     trigger
         Name of the variable containing the integer event ID (trigger code).
+        If this variable is a :class:`~eelbrain._data_obj.Factor` (e.g. from
+        a pipeline's ``label_events``), it is converted to a stable numeric
+        code automatically (see ``event_id``).
+    event_id
+        Mapping from condition label to trigger code, stored on each
+        resulting :class:`mne.Epochs` as its ``event_id`` (each epoch only
+        keeps the one entry matching its own trigger code, since
+        :class:`mne.Epochs` requires every ``event_id`` value to have a
+        matching event). If ``None`` and ``trigger`` resolves to a
+        :class:`~eelbrain._data_obj.Factor`, this is derived automatically
+        from the Factor's own labels.
     ...
         :class:`mne.Epochs` parameters.
 
@@ -1048,7 +1118,11 @@ def variable_length_mne_epochs(
         tmax = _epoch_times(events, tmax, n, 'tmax')
     if picks is None and raw.info['bads']:
         picks = mne.pick_types(raw.info, meg=True, eeg=True, eog=True, ref_meg=False, exclude=[])
+    trigger, event_id = _resolve_trigger(events, trigger, event_id)
     events_array = _mne_events(events, i_start=i_start, trigger=trigger)
+    # mne.Epochs requires every event_id value to have a matching event, so
+    # each single-epoch call below only gets the one entry for its own code
+    label_of_code = {code: label for label, code in (event_id or {}).items()}
     # Load epochs
     out = []
     for i, (tmin_i, tmax_i) in enumerate(zip(tmin, tmax)):
@@ -1066,7 +1140,9 @@ def variable_length_mne_epochs(
             else:
                 missing = (i_max - raw.last_samp) / raw.info['sfreq']
                 raise ValueError(f"{tmax[i]=} is outside of data range by {missing:g} s")
-        epochs_i = mne.Epochs(raw, events_array[i:i + 1], None, tmin_i, tmax_i, baseline, picks, preload=True, decim=decim, **kwargs)
+        code_i = events_array[i, 2]
+        event_id_i = {label_of_code[code_i]: code_i} if code_i in label_of_code else None
+        epochs_i = mne.Epochs(raw, events_array[i:i + 1], event_id_i, tmin_i, tmax_i, baseline, picks, preload=True, decim=decim, **kwargs)
         out.append(epochs_i)
     return out
 
