@@ -652,6 +652,12 @@ def _resolve_trigger(ds, trigger, event_id):
             trigger, event_id = _factor_trigger_to_var(trigger)
         else:
             trigger = Var([event_id[label] for label in trigger])
+    elif trigger is None and event_id is not None and set(event_id.values()) != {1}:
+        # a None trigger assigns every event the same code (1, see
+        # _mne_events), so an event_id with any other code could never
+        # match any event
+        warnings.warn(f"{event_id=} with trigger=None: a None trigger assigns every event the code 1, which does not match the code(s) in event_id; event_id is ignored")
+        event_id = None
     return trigger, event_id
 
 
@@ -722,18 +728,20 @@ def mne_epochs(
         For example, at 100 Hz the epoch with ``tmin=-0.1, tmax=0.4`` will have
         51 samples, while the epoch specified with ``tmin=-0.1, tstop=0.4`` will
         have 50 samples.
+    trigger
+        Name of the variable containing the integer event ID (trigger code).
         If this variable is a :class:`~eelbrain._data_obj.Factor` (e.g. from
         a pipeline's ``label_events``), it is converted to a stable numeric
         code automatically (see ``event_id``).
-    trigger
-        Name of the variable containing the integer event ID (trigger code).
     event_id : dict | None
         Mapping from condition label to trigger code, stored on the
         resulting :class:`mne.Epochs` as its ``event_id`` (passed through to
         :class:`mne.Epochs`). If ``None`` and ``trigger`` resolves to a
         :class:`~eelbrain._data_obj.Factor`, this is derived automatically
         from the Factor's own labels; otherwise MNE derives its own from the
-        trigger codes.
+        trigger codes. With ``trigger=None`` (every event gets the code 1),
+        an ``event_id`` declaring any other code is ignored (with a
+        warning), since it could never match an event.
     ...
         :class:`mne.Epochs` parameters.
     """
@@ -1068,7 +1076,6 @@ def variable_length_mne_epochs(
         For example, at 100 Hz the epoch with ``tmin=-0.1, tmax=0.4`` will have
         51 samples, while the epoch specified with ``tmin=-0.1, tstop=0.4`` will
         have 50 samples.
-        Can be :class:`str` referencing a variable in ``events``.
     picks
         Channels to include (:class:`mne.Epochs` parameter). By default, all
         channels are included; if ``raw`` has bad channels, MEG, EEG and EOG
@@ -1083,6 +1090,7 @@ def variable_length_mne_epochs(
         If this variable is a :class:`~eelbrain._data_obj.Factor` (e.g. from
         a pipeline's ``label_events``), it is converted to a stable numeric
         code automatically (see ``event_id``).
+        Can be :class:`str` referencing a variable in ``events``.
     event_id
         Mapping from condition label to trigger code, stored on each
         resulting :class:`mne.Epochs` as its ``event_id`` (each epoch only
@@ -1090,7 +1098,9 @@ def variable_length_mne_epochs(
         :class:`mne.Epochs` requires every ``event_id`` value to have a
         matching event). If ``None`` and ``trigger`` resolves to a
         :class:`~eelbrain._data_obj.Factor`, this is derived automatically
-        from the Factor's own labels.
+        from the Factor's own labels. With ``trigger=None`` (every event
+        gets the code 1), an ``event_id`` declaring any other code is
+        ignored (with a warning), since it could never match an event.
     ...
         :class:`mne.Epochs` parameters.
 
