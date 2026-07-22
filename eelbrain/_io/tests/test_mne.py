@@ -143,6 +143,28 @@ def test_mne_epochs_no_event_id():
     assert epochs.event_id == {'1': 1, '2': 2}
 
 
+def test_mne_epochs_none_trigger_with_single_code_event_id():
+    "trigger=None (every event gets code 1) works with a matching event_id"
+    ds = _synthetic_raw_and_events()
+    epochs = load.mne.mne_epochs(ds, -0.05, 0.05, trigger=None, event_id={'a': 1})
+    assert epochs.event_id == {'a': 1}
+    assert_array_equal(epochs.events[:, 2], [1, 1, 1])
+
+
+def test_mne_epochs_none_trigger_with_mismatched_event_id_warns():
+    """trigger=None assigns every event the same code (1); an event_id
+    declaring any other code could never match an event, so it is ignored
+    (with a warning) instead of failing deep inside mne.Epochs.
+    """
+    ds = _synthetic_raw_and_events()
+    with pytest.warns(UserWarning):
+        epochs = load.mne.mne_epochs(ds, -0.05, 0.05, trigger=None, event_id={'a': 1, 'b': 2})
+    assert epochs.event_id == {'1': 1}
+    with pytest.warns(UserWarning):
+        epochs = load.mne.mne_epochs(ds, -0.05, 0.05, trigger=None, event_id={'a': 5})
+    assert epochs.event_id == {'1': 1}
+
+
 def test_variable_length_mne_epochs_event_id():
     """Each epoch's event_id only keeps the entry matching its own trigger
     code (mne.Epochs requires every event_id value to have a matching event,
@@ -161,6 +183,15 @@ def test_variable_length_mne_epochs_no_event_id():
     ds['sample'] = ds.pop('i_start')
     epochs_list = load.mne.variable_length_mne_epochs(ds, -0.05, tstop=[0.05, 0.05, 0.05], i_start='sample')
     assert [epochs.event_id for epochs in epochs_list] == [{'1': 1}, {'2': 2}, {'1': 1}]
+
+
+def test_variable_length_mne_epochs_none_trigger_with_mismatched_event_id_warns():
+    "Same trigger=None/event_id mismatch guard as mne_epochs"
+    ds = _synthetic_raw_and_events()
+    ds['sample'] = ds.pop('i_start')
+    with pytest.warns(UserWarning):
+        epochs_list = load.mne.variable_length_mne_epochs(ds, -0.05, tstop=[0.05, 0.05, 0.05], i_start='sample', trigger=None, event_id={'a': 1, 'b': 2})
+    assert [epochs.event_id for epochs in epochs_list] == [{'1': 1}, {'1': 1}, {'1': 1}]
 
 
 def test_mne_epochs_factor_trigger_auto_event_id():

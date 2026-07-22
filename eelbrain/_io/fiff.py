@@ -630,6 +630,12 @@ def _resolve_trigger(ds, trigger, event_id):
             trigger, event_id = _factor_trigger_to_var(trigger)
         else:
             trigger = Var([event_id[label] for label in trigger])
+    elif trigger is None and event_id is not None and set(event_id.values()) != {1}:
+        # a None trigger assigns every event the same code (1, see
+        # _mne_events), so an event_id with any other code could never
+        # match any event
+        warnings.warn(f"{event_id=} with trigger=None: a None trigger assigns every event the code 1, which does not match the code(s) in event_id; event_id is ignored")
+        event_id = None
     return trigger, event_id
 
 
@@ -684,7 +690,9 @@ def mne_epochs(ds, tmin=-0.1, tmax=None, baseline=None, i_start='i_start',
         :class:`mne.Epochs`). If ``None`` and ``trigger`` resolves to a
         :class:`~eelbrain._data_obj.Factor`, this is derived automatically
         from the Factor's own labels; otherwise MNE derives its own from the
-        trigger codes.
+        trigger codes. With ``trigger=None`` (every event gets the code 1),
+        an ``event_id`` declaring any other code is ignored (with a
+        warning), since it could never match an event.
     raw : None | mne Raw
         If None, ds.info['raw'] is used.
     drop_bad_chs : bool
@@ -1010,7 +1018,9 @@ def variable_length_mne_epochs(
         :class:`mne.Epochs` requires every ``event_id`` value to have a
         matching event). If ``None`` and ``trigger`` resolves to a
         :class:`~eelbrain._data_obj.Factor`, this is derived automatically
-        from the Factor's own labels.
+        from the Factor's own labels. With ``trigger=None`` (every event
+        gets the code 1), an ``event_id`` declaring any other code is
+        ignored (with a warning), since it could never match an event.
     tstop
         Alternative to ``tmax``. While ``tmax`` specifies the last samples to
         include, ``tstop`` specifies the sample before which to stop (standard
