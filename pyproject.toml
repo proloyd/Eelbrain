@@ -162,3 +162,9 @@ include-package-data = false
 include = ['eelbrain*']
 
 [tool.setuptools_scm]
+# Restrict the tags considered for version inference to actual version tags
+# (e.g. 'v0.43.0a1'). setuptools_scm's default match ('*[0-9]*') only requires
+# a digit anywhere in the tag name, so stray non-version tags in this repo's
+# history (e.g. 'py2', a marker for the last Python-2-compatible commit) can
+# otherwise be picked up as the "nearest" tag and fail to parse as a version.
+git_describe_command = ["git", "describe", "--dirty", "--tags", "--long", "--match", "v[0-9]*"]
