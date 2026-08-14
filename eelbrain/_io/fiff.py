@@ -603,14 +603,8 @@ def _factor_trigger_to_var(factor: Factor) -> tuple[Var, dict[str, int]]:
     the resulting :class:`mne.Epochs`, so the original string labels remain
     available to code that works with the raw ``mne.Epochs`` object directly.
     """
-    code_of = {}
-    x = np.empty(len(factor), dtype=np.int64)
-    for i, label in enumerate(factor):
-        if label not in code_of:
-            # mask to a non-negative value that fits in int32
-            code_of[label] = zlib.crc32(label.encode()) & 0x7FFFFFFF
-        x[i] = code_of[label]
-    return Var(x), code_of
+    code_of = {label: zlib.crc32(label.encode()) & 0x7FFFFFFF for label in factor.cells} # mask to a non-negative value that fits in int32
+    return factor.as_var(code_of), code_of
 
 
 def _resolve_trigger(ds, trigger, event_id):
@@ -1080,7 +1074,9 @@ def variable_length_mne_epochs(
                 missing = (i_max - raw.last_samp) / raw.info['sfreq']
                 raise ValueError(f"{tmax[i]=} is outside of data range by {missing:g} s")
         code_i = events_array[i, 2]
-        event_id_i = {label_of_code[code_i]: code_i} if code_i in label_of_code else None
+        event_id_i = None
+        if code_i in label_of_code:
+            event_id_i = {label_of_code[code_i]: code_i}
         epochs_i = mne.Epochs(raw, events_array[i:i + 1], event_id_i, tmin_i, tmax_i, baseline, picks, preload=True, decim=decim, **kwargs)
         out.append(epochs_i)
     return out
