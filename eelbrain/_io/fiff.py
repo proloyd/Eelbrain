@@ -603,7 +603,7 @@ def _factor_trigger_to_var(factor: Factor) -> tuple[Var, dict[str, int]]:
     the resulting :class:`mne.Epochs`, so the original string labels remain
     available to code that works with the raw ``mne.Epochs`` object directly.
     """
-    code_of = {label: zlib.crc32(label.encode()) & 0x7FFFFFFF for label in factor.cells} # mask to a non-negative value that fits in int32
+    code_of = {label: zlib.crc32(label.encode()) & 0x7FFFFFFF for label in factor.cells}  # mask to a non-negative value that fits in int32
     return factor.as_var(code_of), code_of
 
 
