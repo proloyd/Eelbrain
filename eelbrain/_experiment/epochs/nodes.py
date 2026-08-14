@@ -212,10 +212,10 @@ class RecordingEpochsDerivative(Derivative[Any]):
         # A Factor-valued 'value' (e.g. from label_events) is converted to a
         # stable numeric trigger + matching event_id automatically.
         if variable_tmax:
-            epochs_list = load.mne.variable_length_mne_epochs(ds, tmin, tmax, None, allow_truncation=True, decim=decim, reject_by_annotation=False, i_start="sample", trigger="value",)
-            epoch_value = Datalist(epochs_list, "epochs")
+            epochs_list = load.mne.variable_length_mne_epochs(ds, tmin, tmax, None, allow_truncation=True, decim=decim, reject_by_annotation=False, i_start='sample', trigger='value',)
+            epoch_value = Datalist(epochs_list, 'epochs')
         else:
-            epochs = load.mne.mne_epochs(ds, tmin, tmax, None, i_start='sample', decim=decim, drop_bad_chs=False, tstop=tstop, reject_by_annotation=False, trigger="value",)
+            epochs = load.mne.mne_epochs(ds, tmin, tmax, None, i_start='sample', decim=decim, drop_bad_chs=False, tstop=tstop, reject_by_annotation=False, trigger='value',)
             if epoch.post_baseline_trigger_shift:
                 # Apply baseline before the trigger shift, on the (projected) epoch data, to
                 # match the deferred view baseline (which also acts on projected data).
