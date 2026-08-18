@@ -1712,6 +1712,116 @@ def test_rejection_by_clean_windows(samples_experiment):
     assert zeroed_any
 
 
+def _check_combine_all_runs_rejection(e, node_name):
+    """Shared assertions: automatic rejection + a combine-all-runs PrimaryEpoch.
+
+    Regression test for a bug where RANSACRejectionDerivative /
+    ChannelModelRejectionDerivative / BadWindowsRejectionDerivative always
+    scored against the full combine-all-runs epoch dataset (their
+    "score-epochs" dependency does not restrict to a single run - see
+    EpochEventsDerivative._find_runs, which decides whether to combine runs
+    purely from the target epoch's own ``run`` attribute, never from
+    ``ctx.state["run"]``), regardless of which single run's rejection cache
+    entry was being computed. SelectedEventsDerivative.build() then compared
+    that multi-run-sized rejection Dataset against a single run's events and
+    raised a RuntimeError on the count mismatch.
+
+    The fix keeps the (statistically preferable) all-runs fit/score
+    behavior, but has ``new_rejection_ds`` carry 'run' and 'sample' columns
+    through so the per-run consumer can recover its own slice by identity.
+    This checks that recovery is both structurally correct (right counts)
+    and correct by event identity (right samples), not just non-crashing.
+    """
+    e.set(epoch='target', epoch_rejection='auto')
+    rej_ds = e._resolve_derivative(node_name).load()
+    assert set(rej_ds['run'].cells) == {'1', '2'}
+
+    # this used to raise RuntimeError before the fix
+    # (baseline=False: combining runs makes epochs' time axes non-identical
+    # across runs more often, which can push ChannelModel/BadWindows onto
+    # the windowed-detection path; that path is orthogonally incompatible
+    # with baseline correction - see epochs/nodes.py's INTERPOLATE_WINDOWS
+    # check - same as the existing single-run windowed-detection tests)
+    ds = e.load_epochs(reject=True, baseline=False)
+    assert ds.n_cases == int(rej_ds['accept'].sum())
+    assert set(ds['run'].cells) <= {'1', '2'}
+
+    for run in ('1', '2'):
+        rej_run = rej_ds.sub(rej_ds['run'] == run)
+        n_accepted_run = int(rej_run['accept'].sum())
+        ds_run = ds.sub(ds['run'] == run)
+        assert ds_run.n_cases == n_accepted_run
+        # event identity, not just counts, survives the per-run slicing
+        accepted_samples = sorted(rej_run[rej_run['accept'].x]['sample'])
+        assert sorted(ds_run['sample']) == accepted_samples
+
+
+@requires_mne_sample_data
+def test_ransac_rejection_combine_all_runs(samples_experiment):
+    "RANSACRejection + combine-all-runs PrimaryEpoch (see _check_combine_all_runs_rejection)"
+    set_log_level("warning", "mne")
+    from eelbrain._experiment.tests.sample_experiment import SampleExperiment
+
+    root = samples_experiment(1, 1, n_runs=2, pick="")  # keep EEG channels
+
+    class Experiment(SampleExperiment):
+        epoch_rejection = {"auto": RANSACRejection(**RANSAC_REJECTION_KWARGS)}
+
+    e = Experiment(root)
+    e.set(subject="R0000", raw="raw")
+    _check_combine_all_runs_rejection(e, "epoch-rejection-ransac")
+
+
+@requires_mne_sample_data
+def test_channel_model_rejection_combine_all_runs(samples_experiment):
+    "ChannelModelRejection + combine-all-runs PrimaryEpoch (see _check_combine_all_runs_rejection)"
+    set_log_level("warning", "mne")
+    from eelbrain._experiment.tests.sample_experiment import SampleExperiment
+
+    root = samples_experiment(1, 1, n_runs=2, pick="")  # keep EEG channels
+
+    # max_interpolate is loose here (unlike test_channel_model_rejection's
+    # tuned value): the point of this test is verifying per-run
+    # slicing/identity survives combine-all-runs scoring, not exercising
+    # rejection thresholds. Scoring against the larger combined dataset
+    # differs from a single run; a tight max_interpolate can end up
+    # rejecting every epoch in one run, tripping the (correct, unrelated)
+    # "no events left" guard in PrimaryEpoch.
+    class Experiment(SampleExperiment):
+        epoch_rejection = {
+            "auto": ChannelModelRejection(
+                model="ridge",
+                fit_threshold=None,
+                score_threshold=2e-5,
+                max_interpolate=30,
+            )
+        }
+
+    e = Experiment(root)
+    e.set(subject="R0000", raw="raw")
+    _check_combine_all_runs_rejection(e, "epoch-rejection-channel-model")
+
+
+@requires_mne_sample_data
+def test_bad_windows_rejection_combine_all_runs(samples_experiment):
+    "BadWindowsRejection + combine-all-runs PrimaryEpoch (see _check_combine_all_runs_rejection)"
+    set_log_level('warning', 'mne')
+    from eelbrain._experiment.tests.sample_experiment import SampleExperiment
+
+    root = samples_experiment(1, 1, n_runs=2, pick='')  # keep EEG channels
+
+    class Experiment(SampleExperiment):
+        raw = {
+            **SampleExperiment.raw,
+            'windows': RawCleanWindows('raw', window_len=0.5, zthresholds=(-2.0, 2.0)),
+        }
+        epoch_rejection = {'auto': BadWindowsRejection(raw='windows', max_interpolate=2)}
+
+    e = Experiment(root)
+    e.set(subject='R0000', raw='raw')
+    _check_combine_all_runs_rejection(e, 'epoch-rejection-bad-windows')
+
+
 @requires_mne_sample_data
 def test_evoked_backed_test_vars_are_post_aggregation_only(samples_experiment):
     set_log_level("warning", "mne")

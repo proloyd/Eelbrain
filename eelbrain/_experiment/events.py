@@ -484,6 +484,40 @@ class SelectedEventsDerivative(UncachedDerivative[Dataset]):
             if rejection_params is not None and reject:
                 rejection_ds = ctx.load("rejection")
 
+                # Automatic rejection methods (RANSAC, ChannelModel,
+                # BadWindows) score/fit against the full "epochs" dependency,
+                # which combines all runs when the epoch's own `run` is None
+                # (see EpochEventsDerivative._find_runs) - regardless of
+                # which single run's rejection cache entry is being built.
+                # Such a `rejection_ds` carries 'run' and 'sample' columns
+                # (added by new_rejection_ds when its input was itself a
+                # combined Dataset); use them to recover this run's slice
+                # and align it with `ds` by event identity (not position -
+                # epoch construction may also drop events whose window
+                # extends past this run's own data boundary, so row counts
+                # can differ even for a single run).
+                if (
+                    rejection_ds.n_cases != ds.n_cases
+                    and "run" in rejection_ds
+                    and "sample" in rejection_ds
+                    and "sample" in ds
+                    and ctx.state.get("run") is not None
+                ):
+                    # Validate against plain arrays first so the Dataset is
+                    # only ever sliced once, for a match that is already
+                    # confirmed - no discarded intermediate Datasets.
+                    run_mask = np.asarray(rejection_ds["run"]) == ctx.state["run"]
+                    run_samples = np.asarray(rejection_ds["sample"])[run_mask]
+                    keep = np.isin(ds["sample"], run_samples)
+                    # Order check, not just membership: both sides are
+                    # naturally sample-ordered within a run, but verify
+                    # rather than assume.
+                    if keep.sum() == len(run_samples) and np.array_equal(
+                        np.asarray(ds["sample"])[keep], run_samples
+                    ):
+                        ds = ds[keep]
+                        rejection_ds = rejection_ds[run_mask]
+
                 # Handle event mismatches
                 if rejection_ds.info.get("epochs.selection") is not None:
                     ds = ds[rejection_ds.info["epochs.selection"]]
