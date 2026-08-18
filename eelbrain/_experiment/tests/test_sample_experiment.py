@@ -311,7 +311,7 @@ def test_sample(samples_experiment):
             'alias': ('R0000', 'R0002'),
         }
     e = Experiment(root)
-    assert (e.get_field_values('subject', group='ab') == e.get_field_values('subject', group='alias') == ['R0000', 'R0002'])
+    assert e.get_field_values('subject', group='ab') == e.get_field_values('subject', group='alias') == ['R0000', 'R0002']
     # Group is part of the derivative's declared identity
     result_options = {
         'data': DataSpec.coerce('meg.rms'),
