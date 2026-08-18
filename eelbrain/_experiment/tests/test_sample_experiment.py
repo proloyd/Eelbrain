@@ -357,7 +357,7 @@ def test_sample(samples_experiment):
         variables = {
             'side': LabelVar('value', {(1, 3): 'left', (2, 4): 'right_changed'}),
             'modality': LabelVar('value', {(1, 2): 'auditory', (3, 4): 'visual_changed'}),
-            }
+        }
     e = Changed(root)
 
     # changed variable, unchanged test with vardef=None
@@ -717,7 +717,7 @@ def test_ica_all_tasks_after_maxwell(samples_experiment):
     with catch_warnings():
         filterwarnings('ignore', "FastICA did not converge", UserWarning)
         ica_path = e.make_ica()
-    assert ica_path == Path(root)/ 'derivatives' / 'mne' / 'sub-R0000' / 'meg' / 'sub-R0000_desc-ica_ica.fif'
+    assert ica_path == Path(root) / 'derivatives' / 'mne' / 'sub-R0000' / 'meg' / 'sub-R0000_desc-ica_ica.fif'
     assert exists(ica_path)
     assert isinstance(e.load_ica(), mne.preprocessing.ICA)
     # the ICA can be applied to an individual recording
@@ -1804,7 +1804,7 @@ def test_selected_events_manifest_uses_real_dependencies(samples_experiment):
     e.set(subject='R0000', epoch='target', epoch_rejection='')
     handle = e._resolve_derivative('epoch-events', options={
         'reject': True,
-        })
+    })
     dependencies = handle.dependency_fingerprints()
     assert 'dependencies' not in handle.current_fingerprint()
     assert set(dependencies) == {'selected-events'}
