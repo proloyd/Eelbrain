@@ -10,13 +10,8 @@ Dependency structure:
     │           │     ├── events-input   (BIDS sidecar, preferred when present)
     │           │     └── events         (trigger-based fallback)
     │           └── rejection            (epoch-rejection-input | epoch-rejection-channel-model |
-<<<<<<< HEAD
-    │                                      epoch-rejection-bad-windows; only when epoch_rejection
-    │                                      is set and reject != False)
-=======
-    │                                      epoch-rejection-ransac; only when epoch_rejection is
-    │                                      set and reject != False)
->>>>>>> 47630133 (FEATURE add RANSACRejection for automatic epoch rejection via ChannelRANSACModel)
+    │                                      epoch-rejection-bad-windows | epoch-rejection-ransac;
+    │                                      only when epoch_rejection is set and reject != False)
     │
     ├── PrimaryEpoch / ContinuousEpoch (combine runs)
     │     └── selected-events  ×N  (one per run)
@@ -51,13 +46,9 @@ Dependency structure:
     Applies epoch-specific trial selection (``sel`` predicate), artifact
     rejection, and bad-channel annotations for a single raw recording file.
     Always restricted to one task/run combination.  Adds the rejection node
-<<<<<<< HEAD
     (``epoch-rejection-input`` for a manual rejection, ``epoch-rejection-bad-windows``
-    for a :class:`~epoch_rejection.BadWindowsRejection`, or
-=======
-    (``epoch-rejection-input`` for a manual rejection, ``epoch-rejection-ransac``
-    for a :class:`~epoch_rejection.RANSACRejection`, or
->>>>>>> 47630133 (FEATURE add RANSACRejection for automatic epoch rejection via ChannelRANSACModel)
+    for a :class:`~epoch_rejection.BadWindowsRejection`, ``epoch-rejection-ransac``
+    for a :class:`~epoch_rejection.RANSACRejection` or
     ``epoch-rejection-channel-model`` for any other automatic rejection) as a
     dependency when epoch rejection is active (``epoch_rejection`` is set and
     ``reject`` is not ``False``).
@@ -141,13 +132,7 @@ class EventsInput(Input[Dataset]):
         self.raw_extension = raw_extension
 
     def _resolve_bids_events_path(self, ctx: Request) -> BIDSPath:
-        return bids_path(
-            ctx.root,
-            ctx.state,
-            extension=".tsv",
-            datatype=ctx.datatype,
-            suffix="events",
-        )
+        return bids_path(ctx.root, ctx.state, extension=".tsv", datatype=ctx.datatype, suffix="events")
 
     def path(self, ctx: Request) -> Path:
         return self._resolve_bids_events_path(ctx).fpath
@@ -166,17 +151,11 @@ class EventsInput(Input[Dataset]):
 
 def _check_ds(ds: Dataset, source: str, info: dict[str, Any]) -> Dataset:
     if not isinstance(ds, Dataset):
-        raise ConfigurationError(
-            f"{source} needs to return the events Dataset. Got {ds!r}."
-        )
+        raise ConfigurationError(f"{source} needs to return the events Dataset. Got {ds!r}.")
     if "sample" not in ds:
-        raise ConfigurationError(
-            f"The Dataset returned by {source} does not contain a variable called `sample`. This variable is required to ascribe events to data samples."
-        )
+        raise ConfigurationError(f"The Dataset returned by {source} does not contain a variable called `sample`. This variable is required to ascribe events to data samples.")
     if "value" not in ds:
-        raise ConfigurationError(
-            f"The Dataset returned by {source} does not contain a variable called `value`. This variable is required to check rejection files."
-        )
+        raise ConfigurationError(f"The Dataset returned by {source} does not contain a variable called `value`. This variable is required to check rejection files.")
     if ds.info is not info:
         # Make sure to keep some required information
         ds.info.update({k: v for k, v in info.items() if k not in ds.info})
@@ -208,13 +187,7 @@ class EventsDerivative(Derivative[Dataset]):
 
     def dependencies(self, ctx: Request) -> tuple[Dependency, ...]:
         raw_name = ctx.state["raw"]
-        return (
-            Dependency(
-                raw_node_name(raw_name),
-                state={"raw": raw_name},
-                options={"preload": False, "noise": False},
-            ),
-        )
+        return (Dependency(raw_node_name(raw_name), state={"raw": raw_name}, options={"preload": False, "noise": False}),)
 
     def _get_trigger_shift(self, subject: str, session: str):
         if isinstance(self.trigger_shift, dict):
@@ -243,18 +216,10 @@ class EventsDerivative(Derivative[Dataset]):
         if self.preload and not raw.preload:
             raw.load_data()
         try:
-            ds = load.mne.events(
-                raw, self.merge_triggers, stim_channel=self.stim_channel
-            )
+            ds = load.mne.events(raw, self.merge_triggers, stim_channel=self.stim_channel)
         except ValueError:
             # No trigger channel present (e.g. sidecar-only dataset); return empty events
-            ds = Dataset(
-                {
-                    "i_start": Var(np.zeros(0, int)),
-                    "trigger": Var(np.zeros(0, int)),
-                },
-                info={"raw": raw},
-            )
+            ds = Dataset({"i_start": Var(np.zeros(0, int)), "trigger": Var(np.zeros(0, int))}, info={"raw": raw})
         del ds.info["raw"]
         ds.rename("i_start", "sample")
         ds.rename("trigger", "value")
@@ -265,9 +230,7 @@ class EventsDerivative(Derivative[Dataset]):
 
         trigger_shift = self._get_trigger_shift(subject, session)
         if trigger_shift:
-            ds["sample"] += int(
-                round(trigger_shift * ds.info["raw.samplingrate"])
-            )
+            ds["sample"] += int(round(trigger_shift * ds.info["raw.samplingrate"]))
 
         # Apply e.fix_events()
         info = ds.info
@@ -275,9 +238,7 @@ class EventsDerivative(Derivative[Dataset]):
         if n_args == 1:
             ds = self.fix_events_impl(ds)
         else:
-            raise ValueError(
-                f"{self.owner_name}.label_events {self.label_events_impl!r}: number of arguments: {n_args}; should take one argument, {self.owner_name}.label_events(self, ds) or label_events(ds) "
-            )
+            raise ValueError(f"{self.owner_name}.label_events {self.label_events_impl!r}: number of arguments: {n_args}; should take one argument, {self.owner_name}.label_events(self, ds) or label_events(ds) ")
         return _check_ds(ds, f"{self.owner_name}.fix_events()", info)
 
     def load(self, ctx: Request, path: Path) -> Dataset:
@@ -343,15 +304,11 @@ class LabeledEventsDerivative(Derivative[Dataset]):
             # Override sfreq with the authoritative value from the raw file, and
             # adjust samples: BIDS TSV is 0-indexed from file start (MNE-BIDS
             # subtracts raw.first_samp on write), so add it back.
-            ds.info["raw.samplingrate"] = trigger_events.info[
-                "raw.samplingrate"
-            ]
+            ds.info["raw.samplingrate"] = trigger_events.info["raw.samplingrate"]
             ds.info["raw.first_samp"] = trigger_events.info["raw.first_samp"]
             ds.info["raw.last_samp"] = trigger_events.info["raw.last_samp"]
             if trigger_events.info["raw.first_samp"]:
-                ds["sample"] = (
-                    ds["sample"] + trigger_events.info["raw.first_samp"]
-                )
+                ds["sample"] = ds["sample"] + trigger_events.info["raw.first_samp"]
         else:
             ds = trigger_events
         # Event Dataset invariant: every BIDS entity is available in info for
@@ -370,9 +327,7 @@ class LabeledEventsDerivative(Derivative[Dataset]):
         if n_args == 1:
             ds = self.label_events_impl(ds)
         else:
-            raise ValueError(
-                f"{self.owner_name}.label_events {self.label_events_impl!r}: number of arguments: {n_args}; should take one argument, {self.owner_name}.label_events(self, ds) or label_events(ds) "
-            )
+            raise ValueError(f"{self.owner_name}.label_events {self.label_events_impl!r}: number of arguments: {n_args}; should take one argument, {self.owner_name}.label_events(self, ds) or label_events(ds) ")
         return _check_ds(ds, f"{self.owner_name}.label_events()", info)
 
     def load(self, ctx: Request, path: Path) -> Dataset:
@@ -394,15 +349,7 @@ class SelectedEventsDerivative(UncachedDerivative[Dataset]):
     """
 
     name = "selected-events"
-    key_fields = (
-        "subject",
-        "session",
-        "acquisition",
-        "run",
-        "raw",
-        "epoch",
-        "epoch_rejection",
-    )
+    key_fields = ("subject", "session", "acquisition", "run", "raw", "epoch", "epoch_rejection")
     key_options = {
         "reject": True,
         "samplingrate": None,
@@ -427,13 +374,9 @@ class SelectedEventsDerivative(UncachedDerivative[Dataset]):
         if reject not in (True, False, "keep"):
             raise ValueError(f"{reject=}")
         if isinstance(epoch, EpochCollection):
-            raise ValueError(
-                f"epoch={epoch.name!r}; can't load events for epoch collection"
-            )
+            raise ValueError(f"epoch={epoch.name!r}; can't load events for epoch collection")
         elif isinstance(epoch, (PrimaryEpoch, ContinuousEpoch)):
-            rejection_params = self.epoch_rejection[
-                ctx.state["epoch_rejection"]
-            ]
+            rejection_params = self.epoch_rejection[ctx.state["epoch_rejection"]]
             state = {"task": epoch.task}
             if epoch.run:
                 state["run"] = epoch.run
@@ -450,13 +393,9 @@ class SelectedEventsDerivative(UncachedDerivative[Dataset]):
                 deps.append(Dependency(node, label='rejection', state=state))
             return tuple(deps)
         elif isinstance(epoch, SecondaryEpoch):
-            options = ctx.options_for(
-                "selected-events", "reject", *EPOCH_EXTRACT_OPTIONS
-            )
+            options = ctx.options_for("selected-events", "reject", *EPOCH_EXTRACT_OPTIONS)
             state = {"epoch": epoch.sel_epoch}
-            return (
-                Dependency("selected-events", options=options, state=state),
-            )
+            return (Dependency("selected-events", options=options, state=state),)
         else:
             raise RuntimeError(f"{epoch=}")
 
@@ -471,16 +410,12 @@ class SelectedEventsDerivative(UncachedDerivative[Dataset]):
             if epoch.sel:
                 ds = ds.sub(epoch.sel)
             if epoch.n_cases is not None and ds.n_cases != epoch.n_cases:
-                raise RuntimeError(
-                    f"Number of epochs {ds.n_cases}, expected {epoch.n_cases}"
-                )
+                raise RuntimeError(f"Number of epochs {ds.n_cases}, expected {epoch.n_cases}")
             ds.index()
 
             # Trial rejection
             reject = ctx.options["reject"]
-            rejection_params = self.epoch_rejection[
-                ctx.state["epoch_rejection"]
-            ]
+            rejection_params = self.epoch_rejection[ctx.state["epoch_rejection"]]
             if rejection_params is not None and reject:
                 rejection_ds = ctx.load("rejection")
 
@@ -496,13 +431,7 @@ class SelectedEventsDerivative(UncachedDerivative[Dataset]):
                 # epoch construction may also drop events whose window
                 # extends past this run's own data boundary, so row counts
                 # can differ even for a single run).
-                if (
-                    rejection_ds.n_cases != ds.n_cases
-                    and "run" in rejection_ds
-                    and "sample" in rejection_ds
-                    and "sample" in ds
-                    and ctx.state.get("run") is not None
-                ):
+                if rejection_ds.n_cases != ds.n_cases and "run" in rejection_ds and "sample" in rejection_ds and "sample" in ds and ctx.state.get("run") is not None:
                     # Validate against plain arrays first so the Dataset is
                     # only ever sliced once, for a match that is already
                     # confirmed - no discarded intermediate Datasets.
@@ -512,42 +441,28 @@ class SelectedEventsDerivative(UncachedDerivative[Dataset]):
                     # Order check, not just membership: both sides are
                     # naturally sample-ordered within a run, but verify
                     # rather than assume.
-                    if keep.sum() == len(run_samples) and np.array_equal(
-                        np.asarray(ds["sample"])[keep], run_samples
-                    ):
+                    if keep.sum() == len(run_samples) and np.array_equal(np.asarray(ds["sample"])[keep], run_samples):
                         ds = ds[keep]
                         rejection_ds = rejection_ds[run_mask]
 
                 # Handle event mismatches
                 if rejection_ds.info.get("epochs.selection") is not None:
                     ds = ds[rejection_ds.info["epochs.selection"]]
-                if rejection_ds.n_cases != ds.n_cases or np.any(
-                    ds["value"] != rejection_ds["value"]
-                ):
-                    raise RuntimeError(
-                        f"The epoch selection file contains different events from the data loaded from the raw file. If the events included in the epoch were changed intentionally, redo epoch selection for {subject}/{epoch.name}"
-                    )
+                if rejection_ds.n_cases != ds.n_cases or np.any(ds["value"] != rejection_ds["value"]):
+                    raise RuntimeError(f"The epoch selection file contains different events from the data loaded from the raw file. If the events included in the epoch were changed intentionally, redo epoch selection for {subject}/{epoch.name}")
 
                 # Channel interpolation
                 if rejection_params.interpolation:
                     ds.info[INTERPOLATE_CHANNELS] = True
                     if INTERPOLATE_CHANNELS in rejection_ds:
-                        ds[INTERPOLATE_CHANNELS] = rejection_ds[
-                            INTERPOLATE_CHANNELS
-                        ]
+                        ds[INTERPOLATE_CHANNELS] = rejection_ds[INTERPOLATE_CHANNELS]
                     else:
-                        ds[INTERPOLATE_CHANNELS] = Datalist(
-                            [[]] * ds.n_cases, INTERPOLATE_CHANNELS, "strlist"
-                        )
+                        ds[INTERPOLATE_CHANNELS] = Datalist([[]] * ds.n_cases, INTERPOLATE_CHANNELS, "strlist")
                     # Time-resolved interpolation windows (long epochs)
                     if INTERPOLATE_WINDOWS in rejection_ds:
                         ds.info[INTERPOLATE_WINDOWS] = True
-                        ds.info[INTERPOLATE_WINDOWS_MAX] = rejection_ds.info[
-                            INTERPOLATE_WINDOWS_MAX
-                        ]
-                        ds[INTERPOLATE_WINDOWS] = rejection_ds[
-                            INTERPOLATE_WINDOWS
-                        ]
+                        ds.info[INTERPOLATE_WINDOWS_MAX] = rejection_ds.info[INTERPOLATE_WINDOWS_MAX]
+                        ds[INTERPOLATE_WINDOWS] = rejection_ds[INTERPOLATE_WINDOWS]
                     else:
                         ds.info[INTERPOLATE_WINDOWS] = False
                 else:
@@ -591,14 +506,7 @@ class EpochEventsDerivative(UncachedDerivative[Dataset]):
     """
 
     name = "epoch-events"
-    key_fields = (
-        "subject",
-        "session",
-        "acquisition",
-        "epoch",
-        "raw",
-        "epoch_rejection",
-    )
+    key_fields = ("subject", "session", "acquisition", "epoch", "raw", "epoch_rejection")
     key_options = {
         "reject": True,
         "samplingrate": None,
@@ -621,12 +529,7 @@ class EpochEventsDerivative(UncachedDerivative[Dataset]):
         """Runs to aggregate over"""
         if isinstance(epoch, (PrimaryEpoch, ContinuousEpoch)):
             if epoch.run is None:
-                key = (
-                    ctx.state["subject"],
-                    ctx.state["session"],
-                    epoch.task,
-                    ctx.state["acquisition"],
-                )
+                key = (ctx.state["subject"], ctx.state["session"], epoch.task, ctx.state["acquisition"])
                 if key in self._runs_for:
                     return self._runs_for[key]
             return ()
@@ -641,48 +544,17 @@ class EpochEventsDerivative(UncachedDerivative[Dataset]):
             raise ValueError(f"epoch={epoch.name!r}; can't load events for epoch collection")
         elif isinstance(epoch, (PrimaryEpoch, SecondaryEpoch, ContinuousEpoch)) and runs:
             # Combine-all: per-run selected-events; index applied after combining
-            rec_options = ctx.options_for(
-                "selected-events", "reject", *EPOCH_EXTRACT_OPTIONS
-            )
-            return tuple(
-                Dependency(
-                    "selected-events",
-                    label=f"selected-events-{run}",
-                    state={"task": epoch.task, "run": run},
-                    options=rec_options,
-                )
-                for run in runs
-            )
-        elif isinstance(
-            epoch, (PrimaryEpoch, SecondaryEpoch, ContinuousEpoch)
-        ):
-            return (
-                Dependency(
-                    "selected-events",
-                    state={
-                        "task": epoch.task,
-                        "run": single_recording_run(self.epochs, epoch),
-                    },
-                    options=ctx.options_for(
-                        "selected-events", "reject", *EPOCH_EXTRACT_OPTIONS
-                    ),
-                ),
-            )
+            rec_options = ctx.options_for("selected-events", "reject", *EPOCH_EXTRACT_OPTIONS)
+            return tuple(Dependency("selected-events", label=f"selected-events-{run}", state={"task": epoch.task, "run": run}, options=rec_options) for run in runs)
+        elif isinstance(epoch, (PrimaryEpoch, SecondaryEpoch, ContinuousEpoch)):
+            return (Dependency("selected-events", state={"task": epoch.task, "run": single_recording_run(self.epochs, epoch)},
+                    options=ctx.options_for("selected-events", "reject", *EPOCH_EXTRACT_OPTIONS)),)
         else:
-            options = ctx.options_for(
-                "epoch-events", "reject", *EPOCH_EXTRACT_OPTIONS
-            )
+            options = ctx.options_for("epoch-events", "reject", *EPOCH_EXTRACT_OPTIONS)
             if isinstance(epoch, SuperEpoch):
                 return tuple(
-                    Dependency(
-                        "epoch-events",
-                        label=f"{sub_epoch}:events",
-                        options=options,
-                        state={
-                            "epoch": sub_epoch,
-                            "task": self.epochs[sub_epoch].task,
-                        },
-                    )
+                    Dependency("epoch-events", label=f"{sub_epoch}:events", options=options,
+                               state={"epoch": sub_epoch, "task": self.epochs[sub_epoch].task})
                     for sub_epoch in epoch.sub_epochs
                 )
             else:
