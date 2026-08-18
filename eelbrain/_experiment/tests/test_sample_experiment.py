@@ -1,5 +1,5 @@
 # Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
-'''Test Pipeline using mne-python sample data'''
+"""Test Pipeline using mne-python sample data"""
 import itertools
 import json
 import logging
@@ -63,19 +63,19 @@ def _test_result_manifest_path(
 
 @pytest.fixture(scope='session')
 def _samples_templates(tmp_path_factory):
-    'Per-session cache of sample-experiment templates, keyed by setup configuration'
+    "Per-session cache of sample-experiment templates, keyed by setup configuration"
     return tmp_path_factory.mktemp('samples_templates'), {}
 
 
 @pytest.fixture
 def samples_experiment(_samples_templates, tmp_path):
-    '''Sample-experiment dataset roots backed by per-configuration templates.
+    """Sample-experiment dataset roots backed by per-configuration templates.
 
     ``datasets.setup_samples_experiment`` is expensive, so each distinct
     configuration is built only once per test session and cached. Every call
     returns a fresh copy of the relevant template, so tests stay isolated while
     the dataset is generated only once per kind.
-    '''
+    """
     template_dir, cache = _samples_templates
     counter = itertools.count()
 
@@ -87,8 +87,8 @@ def samples_experiment(_samples_templates, tmp_path):
         mris: bool = False,
         pick: str = 'mag',
     ) -> str:
-        if not mne.datasets.has_dataset('sample'):
-            pytest.skip('mne sample data unavailable')
+        if not mne.datasets.has_dataset("sample"):
+            pytest.skip("mne sample data unavailable")
         key = (n_subjects, n_tasks, n_segments, n_runs, mris, pick)
         if key not in cache:
             template = template_dir / f'template-{len(cache)}'
@@ -129,7 +129,7 @@ def test_sample(samples_experiment):
         state['subject'] = '*'
         assert str(ica_file_path(state, '*', datatype='meg')) == join('derivatives', 'mne', 'sub-*', 'meg', 'sub-*_desc-*_ica.fif')
         state['subject'] = 'R0002'
-        assert str(ica_file_path(state, '*', datatype='meg')) == join('derivatives', 'mne', 'sub-R0002', 'meg', 'sub-R0002_desc-*_ica.fif',)
+        assert str(ica_file_path(state, '*', datatype='meg')) == join('derivatives', 'mne', 'sub-R0002', 'meg', 'sub-R0002_desc-*_ica.fif')
 
     # events
     e.set('R0001', epoch_rejection='')
@@ -201,7 +201,7 @@ def test_sample(samples_experiment):
     assert_dataobj_equal(ds_ind, ds, decimal=19)  # make vs load evoked
 
     # sensor space tests
-    megs = [e.load_evoked(cat='auditory', baseline=False, model='modality', interpolate_bads=True,)['mag'] for _ in e]
+    megs = [e.load_evoked(cat='auditory', baseline=False, model='modality', interpolate_bads=True)['mag'] for _ in e]
     res = e.load_test('a>v', 0.05, 0.2, 0.05, samples=100, data='meg.rms', inv='', baseline=False)
     test_manifest = _test_result_manifest_path(e, 'a>v', 0.05, 0.2, 0.05, samples=100, data='meg.rms', baseline=False)
     assert exists(test_manifest)
@@ -239,7 +239,7 @@ def test_sample(samples_experiment):
         variables = {
             **SampleExperiment.variables,
             'shift': LabelVar('side', {'left': 0, 'right': shift}),
-            'shift_t': LabelVar('value', {(1, 3): 0, (2, 4): shift}),
+            'shift_t': LabelVar('value', {(1, 3): 0, (2, 4): shift})
         }
     e = Experiment(root)
     # test shift in events
@@ -311,7 +311,7 @@ def test_sample(samples_experiment):
             'alias': ('R0000', 'R0002'),
         }
     e = Experiment(root)
-    assert (e.get_field_values('subject', group='ab')== e.get_field_values('subject', group='alias')== ['R0000', 'R0002'])
+    assert (e.get_field_values('subject', group='ab') == e.get_field_values('subject', group='alias') == ['R0000', 'R0002'])
     # Group is part of the derivative's declared identity
     result_options = {
         'data': DataSpec.coerce('meg.rms'),
@@ -333,7 +333,7 @@ def test_sample(samples_experiment):
 
     class BadExperiment(SampleExperiment):
         parcs = {'ac': 'aparc'}
-    with pytest.raises(TypeError, match='need Parcellation'):
+    with pytest.raises(TypeError, match="need Parcellation"):
         BadExperiment(root)
 
     # changes
@@ -421,7 +421,7 @@ def test_sample(samples_experiment):
     assert not np.allclose(ds1['mag'].x, ds2['mag'].x, atol=1e-20), "ICA change ignored"
     # apply-ICA
     with catch_warnings():
-        filterwarnings('ignore', 'The measurement information indicates a low-pass frequency', RuntimeWarning)
+        filterwarnings('ignore', "The measurement information indicates a low-pass frequency", RuntimeWarning)
         ds1 = e.load_evoked(raw='ica', epoch_rejection='')
         ds2 = e.load_evoked(raw='apply-ica', epoch_rejection='')
     assert_dataobj_equal(ds2, ds1)
@@ -521,7 +521,7 @@ def test_sample_source(samples_experiment):
     assert ds_left.n_cases < ds_all.n_cases
     with open(_test_result_manifest_path(e, 'left=right', 0.05, 0.2, 0.05, samples=8, data='source')) as fid:
         source_manifest_data = json.load(fid)
-    with open(_test_result_manifest_path(e, 'left=right', 0.05, 0.2, 0.05, samples=8, data='source',disconnect_labels=True)) as fid:
+    with open(_test_result_manifest_path(e, 'left=right', 0.05, 0.2, 0.05, samples=8, data='source', disconnect_labels=True)) as fid:
         disconnected_manifest_data = json.load(fid)
     assert source_manifest_data['fingerprint']['parc']['base'] == 'aparc'
     assert source_manifest_data['key']['parc'] == 'ac'
@@ -545,7 +545,7 @@ def test_sample_source(samples_experiment):
     group_deps = roi_deps['dataset']['dependencies']
     assert set(group_deps) == {'R0000', 'R0001', 'R0002'}
     assert all(group_deps[subject]['name'] == 'evoked-stc' for subject in group_deps)
-    assert all('source-morph' not in group_deps[subject]['dependencies']for subject in group_deps)
+    assert all('source-morph' not in group_deps[subject]['dependencies'] for subject in group_deps)
     res = ress.res['transversetemporal-lh']
     assert res.p.min() == 1 / 7
     with pytest.raises(TypeError, match='disconnect_labels'):
@@ -659,7 +659,7 @@ def test_sample_tasks(monkeypatch, samples_experiment):
     # SuperEpoch should depend on the same sub-epoch request as direct loading.
     super_handle = e._resolve_derivative('epochs')
     super_dependencies = super_handle.dependency_fingerprints()
-    target2_dependency = next( dep for dep in super_handle.node.dependencies(super_handle) if dep.label == 'target2')
+    target2_dependency = next(dep for dep in super_handle.node.dependencies(super_handle) if dep.label == 'target2')
     with e._temporary_state:
         e.set(epoch='target2')
         target2_entry = e._resolve_derivative('epochs', options=target2_dependency.options).describe_dependency()
@@ -717,7 +717,7 @@ def test_ica_all_tasks_after_maxwell(samples_experiment):
     with catch_warnings():
         filterwarnings('ignore', "FastICA did not converge", UserWarning)
         ica_path = e.make_ica()
-    assert ica_path== Path(root)/ 'derivatives' / 'mne' / 'sub-R0000' / 'meg' / 'sub-R0000_desc-ica_ica.fif'
+    assert ica_path == Path(root)/ 'derivatives' / 'mne' / 'sub-R0000' / 'meg' / 'sub-R0000_desc-ica_ica.fif'
     assert exists(ica_path)
     assert isinstance(e.load_ica(), mne.preprocessing.ICA)
     # the ICA can be applied to an individual recording
@@ -1422,8 +1422,7 @@ def test_evoked_backed_test_vars_are_post_aggregation_only(samples_experiment):
     assert 'modality_num' in ds
 
     with pytest.raises(ConfigurationError, match='For evoked tests'):
-        e._resolve_derivative('evoked-test-data', options={**options, 'test': 'anova-bad'}
-        ).load()
+        e._resolve_derivative('evoked-test-data', options={**options, 'test': 'anova-bad'}).load()
 
 
 @requires_mne_sample_data
@@ -1715,7 +1714,7 @@ def test_recording_epochs_cache_uses_fif(samples_experiment):
     }
     epochs_handle = e._resolve_derivative('epochs', options=options)
     assert not epochs_handle.is_valid()
-    dep = next(dep for dep in epochs_handle.node.dependencies(epochs_handle)if dep.name == 'recording-epochs')
+    dep = next(dep for dep in epochs_handle.node.dependencies(epochs_handle) if dep.name == 'recording-epochs')
     handle = e._derivatives.resolve(dep.name, state={**e.state, **dep.state}, options=dep.options)
     epochs = handle.load()
 
@@ -1969,7 +1968,7 @@ def test_sample_neuromag(samples_experiment):
 
 @requires_mne_sample_data
 def test_epoch_run(samples_experiment):
-    '''Test run aggregation for PrimaryEpoch and ContinuousEpoch.'''
+    """Test run aggregation for PrimaryEpoch and ContinuousEpoch."""
     set_log_level('warning', 'mne')
 
     root = samples_experiment(n_subjects=2, n_segments=2, n_runs=2)
@@ -2259,7 +2258,6 @@ def test_load_trf_filepredictor(samples_experiment):
     # re-saving identical data (new mtime) keeps the TRF valid: the deep
     # comparison against the reference copy absorbs the file-stat drift
     import os
-
     save.pickle(predictor_ndvars['auditory'], pdir / 'auditory~env.pickle')
     os.utime(pdir / 'auditory~env.pickle', (1_700_000_000, 1_700_000_000))
     assert e._resolve_derivative('trf', options=options).is_valid()
@@ -2508,7 +2506,7 @@ def test_load_trf_continuous_predictor_multiple_runs(samples_experiment):
 
 @requires_mne_sample_data
 def test_load_trfs(samples_experiment):
-    'load_trfs: per-subject and group assembly in sensor space'
+    "load_trfs: per-subject and group assembly in sensor space"
     from eelbrain._experiment.tests.sample_experiment import SampleTRF
 
     set_log_level('warning', 'mne')
@@ -2544,7 +2542,7 @@ def test_load_trfs(samples_experiment):
 
 @requires_mne_sample_data
 def test_load_trfs_collection(samples_experiment):
-    'load_trfs over an EpochCollection: one case per member epoch'
+    "load_trfs over an EpochCollection: one case per member epoch"
     from eelbrain._experiment.tests.sample_experiment import SampleExperiment, SampleTRF
 
     class SampleTRFCollection(SampleTRF):
@@ -2565,7 +2563,7 @@ def test_load_trfs_collection(samples_experiment):
 @requires_mne_sample_data
 @pytest.mark.slow
 def test_load_trfs_source(samples_experiment):
-    'load_trfs in source space: group morph to the common brain plus smoothing'
+    "load_trfs in source space: group morph to the common brain plus smoothing"
     from eelbrain._experiment.tests.sample_experiment import SampleTRF
 
     set_log_level('warning', 'mne')
