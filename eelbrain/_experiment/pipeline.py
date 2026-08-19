@@ -3346,7 +3346,7 @@ class Pipeline(StateModel):
             Maximum element-wise absolute difference in the ``dev_head_t``
             transformation matrix for two recordings to be considered as having
             the same head position. Default ``1e-3`` corresponds to approximately
-            1 mm for translation (and roughly 0.6° for rotation), which is
+            1 mm for translation (and roughly 0.06° for rotation), which is
             conservative enough to justify sharing a forward solution.
         asds
             Return a :class:`Dataset` instead of formatted output.
