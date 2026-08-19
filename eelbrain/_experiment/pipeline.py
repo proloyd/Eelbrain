@@ -89,12 +89,7 @@ def _session_log_file(log_dir: Path, name: str, initialized: datetime) -> Path:
             if path.suffix != '.log' or not path.stem.startswith(prefix):
                 continue
             session, separator, time = path.stem[len(prefix):].partition('-')
-            if (
-                separator
-                and session.isdecimal()
-                and len(time) == 4
-                and time.isdecimal()
-            ):
+            if separator and session.isdecimal() and len(time) == 4 and time.isdecimal():
                 sessions.append(int(session))
     session = max(sessions, default=0) + 1
     time = initialized.strftime('%H%M')
@@ -231,7 +226,7 @@ class Pipeline(StateModel):
         # Combinations
         'lobes': EelbrainParc(True, ('lateral', 'medial')),
         'lobes-op': CombinationParc('lobes', {'occipitoparietal': "occipital + parietal"}, ('lateral', 'medial')),
-        "lobes-ot": CombinationParc("lobes", {"occipitotemporal": "occipital + temporal"}, ("lateral", "medial")),
+        "lobes-ot": CombinationParc('lobes', {'occipitotemporal': "occipital + temporal"}, ('lateral', 'medial')),
     }
     parcs: dict[str, Parcellation] = {}
 
@@ -276,7 +271,7 @@ class Pipeline(StateModel):
         self._tasks = tuple(get_entity_vals(root, 'task', **ignore_entities))
         self._runs = tuple(get_entity_vals(root, 'run', **ignore_entities))
         if self.datatype is not None:
-            if self.datatype not in ("meg", "eeg"):
+            if self.datatype not in ('meg', 'eeg'):
                 raise ConfigurationError(f"`datatype` must be 'meg' or 'eeg', not {self.datatype!r}.")
             if not isinstance(self.extension, str):
                 raise TypeError(f"{self.__class__.__name__}.extension={self.extension!r} with {self.__class__.__name__}.datatype={self.datatype!r}; extension needs to be specified (e.g., '.fif').")
@@ -308,7 +303,7 @@ class Pipeline(StateModel):
             for path in find_matching_paths(root, subjects=self._subjects, sessions=self._sessions, tasks=self._tasks, datatypes=datatype, suffixes=datatype, extensions=extensions, ignore_nosub=True)
             if not path.acquisition or path.acquisition in acquisitions
         )
-        self._acquisitions = tuple(sorted({path.acquisition or "" for path in matching_paths}))
+        self._acquisitions = tuple(sorted({path.acquisition or '' for path in matching_paths}))
 
         # Recordings index: existing (subject, session, task, acquisition, run) combinations of source
         # recordings, from a single find_matching_paths scan. Scoped to the raw datatype /
@@ -432,9 +427,7 @@ class Pipeline(StateModel):
         # TRF: named models, estimators, predictors, stimulus variables
         self._named_models: dict[str, Model] = ConfigurationDict('model')
         for name, value in self.models.items():
-            self._named_models[name] = Model.coerce(value).initialize(
-                self._named_models
-            )
+            self._named_models[name] = Model.coerce(value).initialize(self._named_models)
         estimators = {'boosting': Boosting(), **self.estimators}
         for name, estimator in estimators.items():
             if not isinstance(estimator, Estimator):
@@ -478,7 +471,7 @@ class Pipeline(StateModel):
         # cov
         self._register_field('cov', sorted(self._covs))
         # inv determines the analysis space: a non-empty inverse means source space, inv='' means sensor space.
-        self._register_field('inv', default="", eval_handler=self._eval_inv, allow_empty=True)
+        self._register_field('inv', default='', eval_handler=self._eval_inv, allow_empty=True)
         # default sensor-space data kind for analyses (see .default_data)
         if self.default_data is None:
             self._default_data = 'eeg' if datatype == 'eeg' else 'meg'
@@ -492,11 +485,7 @@ class Pipeline(StateModel):
         self._register_field('adjacency', ('', 'link-midline'), allow_empty=True)
 
         # # slave fields
-        self._register_field("mrisubject",
-                             depends_on=("mri", 'subject'),
-                             slave_handler=self._update_mrisubject,
-                             repr=False,
-                             )
+        self._register_field("mrisubject", depends_on=("mri", 'subject'), slave_handler=self._update_mrisubject, repr=False)
 
         # Initialize dependency tree
         self._init_derivative_registry()
@@ -506,11 +495,11 @@ class Pipeline(StateModel):
         ##########
         # log package versions
         from .. import __version__
-        log.info("*** %s initialized with root %s on %s ***", self.__class__.__name__, root, initialized.strftime("%Y-%m-%d %H:%M:%S"))
-        level = (logging.DEBUG if any('dev' in v for v in (__version__, mne.__version__)) else logging.INFO)
+        log.info("*** %s initialized with root %s on %s ***", self.__class__.__name__, root, initialized.strftime('%Y-%m-%d %H:%M:%S'))
+        level = logging.DEBUG if any('dev' in v for v in (__version__, mne.__version__)) else logging.INFO
         log.log(level, "Using eelbrain %s, mne %s.", __version__, mne.__version__)
         # Legend for the tab-separated columns appended to cache-event log lines (DEBUG, file only).
-        log.debug("Cache-event columns (tab-separated after the message): %s", '\t'.join(CACHE_EVENT_COLUMNS),)
+        log.debug("Cache-event columns (tab-separated after the message): %s", '\t'.join(CACHE_EVENT_COLUMNS))
 
         # set initial values
         self.set(**state)
@@ -566,7 +555,7 @@ class Pipeline(StateModel):
         self._derivatives.register(EventsInput(self._raw_extension))
         self._derivatives.register(EventsDerivative(
             self.trigger_shift,
-            sequence_arg(f"{self.__class__.__name__}.stim_channel", self.stim_channel),
+            sequence_arg(f'{self.__class__.__name__}.stim_channel', self.stim_channel),
             self.merge_triggers,
             self.preload,
             self.fix_events,
@@ -628,10 +617,10 @@ class Pipeline(StateModel):
         return self._resolve_derivative(name, options=options, controls=controls).load(view=view)
 
     def clean_cache(
-        self,
-        dry_run: bool = False,
-        delete: bool = False,
-        revalidate: bool = True,
+            self,
+            dry_run: bool = False,
+            delete: bool = False,
+            revalidate: bool = True,
     ) -> fmtxt.Table | None:
         """Report and delete invalid or stale cache files (garbage collection).
 
@@ -656,7 +645,7 @@ class Pipeline(StateModel):
         total_size = report.total_size()
         table = report.summary()
         if report.errors:
-            self._log.debug("Cache scan errors:\n%s", "\n".join(f"{path}: {error}" for path, error in report.errors))
+            self._log.debug("Cache scan errors:\n%s", '\n'.join(f"{path}: {error}" for path, error in report.errors))
         if dry_run or not deletable:
             return table
         print(table)
@@ -706,7 +695,7 @@ class Pipeline(StateModel):
             Group name if the value specifies a group, None otherwise.
         """
         if subjects is None:  # default:
-            subjects = -1 if "group" in kwargs else 1
+            subjects = -1 if 'group' in kwargs else 1
 
         if isinstance(subjects, int):
             if subjects == 1:
@@ -760,7 +749,7 @@ class Pipeline(StateModel):
             common_brain = self.get('common_brain')
             if common_brain and (not exclude or common_brain not in exclude):
                 mrisubjects.insert(0, common_brain)
-            mrisubjects = ["sub-" + s for s in mrisubjects if (s != common_brain and not s.startswith("sub-"))]
+            mrisubjects = ['sub-' + s for s in mrisubjects if (s != common_brain and not s.startswith('sub-'))]
             return mrisubjects
         else:
             return StateModel.get_field_values(self, field, exclude)
@@ -1196,7 +1185,7 @@ class Pipeline(StateModel):
     def load_predictor(
             self,
             code: str,
-            tstep: float = 0.01,
+            tstep: float = 0.1,
             n_samples: int = None,
             tmin: float = None,
             filter_x: bool | Literal['continuous'] = False,
@@ -1282,12 +1271,12 @@ class Pipeline(StateModel):
         else:
             data_string = self._resolve_data(data).string
         model = Model.coerce(x).initialize(self._named_models).sorted()
-        return {"x": model, "tstart": float(tstart), "tstop": float(tstop), "estimator": estimator, "data": data_string, "mask": mask, "samplingrate": samplingrate, "filter_x": filter_x}
+        return {'x': model, 'tstart': float(tstart), 'tstop': float(tstop), 'estimator': estimator, 'data': data_string, 'mask': mask, 'samplingrate': samplingrate, 'filter_x': filter_x}
 
     def load_trf(
             self,
             x: str,
-            tstart: float = 0.0,
+            tstart: float = 0.,
             tstop: float = 0.5,
             *,
             estimator: str = 'boosting',
@@ -1340,7 +1329,7 @@ class Pipeline(StateModel):
     def _trf_job_spec(
             self,
             x: str,
-            tstart: float = 0.0,
+            tstart: float = 0.,
             tstop: float = 0.5,
             *,
             estimator: str = 'boosting',
@@ -1358,7 +1347,7 @@ class Pipeline(StateModel):
     def load_trf_job(
             self,
             x: str,
-            tstart: float = 0.0,
+            tstart: float = 0.,
             tstop: float = 0.5,
             *,
             estimator: str = 'boosting',
@@ -1402,7 +1391,7 @@ class Pipeline(StateModel):
             self,
             subjects: SubjectArg,
             x: str,
-            tstart: float = 0.0,
+            tstart: float = 0.,
             tstop: float = 0.5,
             *,
             estimator: str = 'boosting',
@@ -1754,7 +1743,7 @@ class Pipeline(StateModel):
         compatibility with public STC-based workflows.
         """
         self.set(**state)
-        return self._load_derivative("source-morph")
+        return self._load_derivative('source-morph')
 
     def load_neighbor_correlation(
             self,
@@ -1852,10 +1841,7 @@ class Pipeline(StateModel):
              - :ref:`state-raw`: preprocessing pipeline
         """
         raw_name = self.get('raw', **kwargs)
-        raw = self._load_derivative(
-            raw_node_name(raw_name),
-            options={'preload': preload, 'noise': noise},
-        )
+        raw = self._load_derivative(raw_node_name(raw_name), options={'preload': preload, 'noise': noise})
         if decim and decim > 1:
             assert samplingrate is None, "samplingrate and decim can't both be specified"
             samplingrate = int(round(raw.info['sfreq'] / decim))
@@ -2071,7 +2057,7 @@ class Pipeline(StateModel):
         if not return_data:
             return result
         elif isinstance(test_obj, TwoStageTest):
-            raise NotImplementedError('Data for two-stage test')
+            raise NotImplementedError("Data for two-stage test")
         data_options = {key: value for key, value in options.items() if key != 'disconnect_labels'}
         data = self._load_derivative('evoked-test-data', options=data_options)
         return data, result
@@ -2285,7 +2271,7 @@ class Pipeline(StateModel):
             # each task's onsets by the same offset used to append the raws
             if task:
                 event_dss = []
-                offset = 0.0  # seconds into the concatenated recording
+                offset = 0.  # seconds into the concatenated recording
                 with self._temporary_state:
                     for state in ctx.node._source_states(ctx, task):
                         ds_t = self.load_events(raw=pipe.source, **state)
@@ -2471,7 +2457,7 @@ class Pipeline(StateModel):
         selection, create the corresponding selection file for each target
         preprocessing setting.
         """
-        rej = self.get("epoch_rejection", **state)
+        rej = self.get('epoch_rejection', **state)
         rej_args = self._epoch_rejection[rej]
         if rej_args is None:
             raise ValueError(f"epoch_rejection={rej!r}; no epoch rejection configured")
@@ -2529,9 +2515,7 @@ class Pipeline(StateModel):
             rej_ds = new_rejection_ds(ds)
             rej_ds[:, 'accept'] = True
             for key, threshold in auto_dict.items():
-                rej_ds['accept'] &= (
-                    ds[key].abs().max(('sensor', 'time')) <= threshold
-                )
+                rej_ds['accept'] &= ds[key].abs().max(('sensor', 'time')) <= threshold
             # create description for info
             args = [f"{auto=}"]
             if overwrite is True:
@@ -2540,7 +2524,7 @@ class Pipeline(StateModel):
                 args.append(f"{samplingrate=}")
             if decim is not None:
                 args.append(f"{decim=}")
-            rej_ds.info["desc"] = f"Created with {self.__class__.__name__}.make_epoch_rejection({', '.join(args)})"
+            rej_ds.info['desc'] = f"Created with {self.__class__.__name__}.make_epoch_rejection({', '.join(args)})"
             # save
             save.pickle(rej_ds, path)
             # print info
@@ -2549,7 +2533,7 @@ class Pipeline(StateModel):
             self._log.info(f"make_epoch_rejection: {n_rej} of {rej_ds.n_cases} epochs rejected with threshold {auto} for {desc}")
             return
 
-        ds = self._load_derivative('epochs', options={"reject": False, "ndvar": False})
+        ds = self._load_derivative('epochs', options={'reject': False, 'ndvar': False})
         # eog_sns = self._eog_sns.get(ds[y_name].sensor.sysname, ())
         # don't mark eog sns if it is bad
         # bad_channels = self.load_bad_channels()
@@ -2578,12 +2562,10 @@ class Pipeline(StateModel):
         if isinstance(field, str):
             current = self.get(field)
             values = self.get_field_values(field)
-
             def fmt(x): return x
         else:
             current = tuple(self.get(f) for f in field)
             values = list(product(*(self.get_field_values(f) for f in field)))
-
             def fmt(x): return "/".join(x)
 
         # find the index of the next value
@@ -2694,7 +2676,7 @@ class Pipeline(StateModel):
             from mayavi import mlab
 
             seeds = parc._seeds_for_subject(subject)
-            seed_points = {hemi: [np.atleast_2d(coords) for name, coords in seeds.items() if name.endswith(hemi)] for hemi in ("lh", "rh")}
+            seed_points = {hemi: [np.atleast_2d(coords) for name, coords in seeds.items() if name.endswith(hemi)] for hemi in ('lh', 'rh')}
             plot_points = {hemi: np.vstack(points).T if len(points) else None for hemi, points in seed_points.items()}
             for hemisphere in brain.brains:
                 if plot_points[hemisphere.hemi] is None:
@@ -2708,7 +2690,7 @@ class Pipeline(StateModel):
     def plot_brain(
             self,
             common_brain: bool = True,
-            hemi: str = "split",
+            hemi: str = 'split',
             **brain_kwargs,
     ):
         """Plot the brain model
@@ -2740,12 +2722,12 @@ class Pipeline(StateModel):
         return Brain(mrisubject, **brain_args)
 
     def plot_coregistration(
-        self,
-        surfaces: str | list | dict = 'auto',
-        meg: tuple[str, ...] = ('helmet', 'sensors'),
-        dig: bool = True,
-        parallel: bool = True,
-        **state
+            self,
+            surfaces: str | list | dict = 'auto',
+            meg: tuple[str, ...] = ('helmet', 'sensors'),
+            dig: bool = True,
+            parallel: bool = True,
+            **state
     ):
         """Plot the coregistration (Head shape and MEG helmet)
 
@@ -2795,7 +2777,7 @@ class Pipeline(StateModel):
                 cov = self.load_cov()
                 picks = np.arange(len(cov.ch_names))
                 ds = self.load_evoked(baseline=True, ndvar=False)
-                whitened_evoked = mne.whiten_evoked(ds[0, "evoked"], cov, picks)
+                whitened_evoked = mne.whiten_evoked(ds[0, 'evoked'], cov, picks)
                 gfp = whitened_evoked.data.std(0)
 
                 gfps.append(gfp)
@@ -2817,11 +2799,11 @@ class Pipeline(StateModel):
             data: DataArg = None,
             separate: bool = False,
             baseline: BaselineArg = True,
-            ylim: Literal["same", "different"] = "same",
+            ylim: Literal['same', 'different'] = 'same',
             name: str = None,
             h: float = 2.5,
             run: bool = None,
-            model: str = "",
+            model: str = '',
             **kwargs,
     ):
         """Plot evoked sensor data
@@ -2973,7 +2955,7 @@ class Pipeline(StateModel):
         """
         raw = self.load_raw(ndvar=True, decim=decim, **state)
         state_ = self._fields
-        name = join_stem_parts(raw_basename(state_, datatype=self._datatype), f"raw-{state_['raw']}")
+        name = join_stem_parts(raw_basename(state_, datatype=self._datatype), f'raw-{state_["raw"]}')
         if raw.info['meas'] == 'V':
             vmax = 1.5e-4
         elif raw.info['meas'] == 'B':
@@ -2997,9 +2979,9 @@ class Pipeline(StateModel):
             Other state parameters.
         """
         if subject is not None:
-            if "group" not in state:
-                if subject not in self._field_values['subject'] and subject in self._groups["all"]:
-                    old = self.get("group")
+            if 'group' not in state:
+                if subject not in self._field_values['subject'] and subject in self._groups['all']:
+                    old = self.get('group')
                     print(f"group: {old} --> all ({subject} not in {old})")
                     state['group'] = 'all'
                 else:
@@ -3010,7 +2992,7 @@ class Pipeline(StateModel):
             StateModel.set(self, subject=subject)
 
     def _post_set_group(self, _: str, group: str) -> None:
-        if group == "*" or group not in self._groups:
+        if group == '*' or group not in self._groups:
             return
         group_members = self._groups[group]
         self._field_values['subject'] = group_members
@@ -3020,9 +3002,9 @@ class Pipeline(StateModel):
 
     def set_inv(
             self,
-            ori: str = "free",
+            ori: str = 'free',
             snr: float = 3,
-            method: str = "dSPM",
+            method: str = 'dSPM',
             depth: float = 0,
             pick_normal: bool = False,
             **state,
@@ -3292,7 +3274,7 @@ class Pipeline(StateModel):
         if list_tasks:
             subjects = sorted({subject for subject, _ in bad_channels})
             t = fmtxt.Table('l' * (1 + len(use_tasks)), caption=caption)
-            t.cells('subject', *use_tasks)
+            t.cells('Subject', *use_tasks)
             t.midrule()
             for subject in subjects:
                 t.cell(subject)
@@ -3302,10 +3284,10 @@ class Pipeline(StateModel):
             if use_tasks:
                 caption += " (all tasks equal)"
             t = fmtxt.Table('ll', caption=caption)
-            t.cells('subject', 'Bad channels')
+            t.cells('Subject', 'Bad channels')
             t.midrule()
             for subject in sorted(bad_channels):
-                t.cells(subject, ", ".join(bad_channels[subject]))
+                t.cells(subject, ', '.join(bad_channels[subject]))
         return t
 
     def _show_dependencies(
@@ -3364,7 +3346,7 @@ class Pipeline(StateModel):
             Maximum element-wise absolute difference in the ``dev_head_t``
             transformation matrix for two recordings to be considered as having
             the same head position. Default ``1e-3`` corresponds to approximately
-            1 mm for translation (and roughly 0.06° for rotation), which is
+            1 mm for translation (and roughly 0.6° for rotation), which is
             conservative enough to justify sharing a forward solution.
         asds
             Return a :class:`Dataset` instead of formatted output.
@@ -3442,7 +3424,7 @@ class Pipeline(StateModel):
                     if chl[session].get(subject, {}).get(key, False):
                         any_chl = True
                     if key not in subject_data:
-                        subject_labels[key] = ""
+                        subject_labels[key] = ''
                         continue
                     trans = subject_data[key]
                     if trans is None:
@@ -3522,7 +3504,7 @@ class Pipeline(StateModel):
             row_keys = _row_keys(session)
             col_spec = 'l' + ('r' if has_runs else '') + 'c' * len(subjects)
             t = fmtxt.Table(col_spec, title=title, caption=_make_caption(session))
-            t.cell('task')
+            t.cell('Task')
             if has_runs:
                 t.cell('Run')
             for subject in subjects:
@@ -3699,9 +3681,7 @@ class Pipeline(StateModel):
                 if has_epoch_rejection:
                     n_good.append(ds['accept'].sum())
                 if has_interp:
-                    n_interp.append(
-                        np.mean([len(chi) for chi in ds[INTERPOLATE_CHANNELS]])
-                    )
+                    n_interp.append(np.mean([len(chi) for chi in ds[INTERPOLATE_CHANNELS]]))
             n_events.append(ds.n_cases)
         has_interp = has_interp and any(n_interp)
         caption = f"Rejection info for raw={raw_name}, epoch={epoch_name}, rej={rej_name}. Percent is rounded to one decimal."
@@ -3777,12 +3757,7 @@ class Pipeline(StateModel):
                 #     pass
                 # FIXME: use ctx.node.exists()
                 fixed_state = {k: v for k, v in self._fields.items() if not (isinstance(v, str) and '*' in v)}
-                query = bids_path(
-                    self.root,
-                    fixed_state,
-                    self._raw_extension,
-                    datatype=self._datatype,
-                )
+                query = bids_path(self.root, fixed_state, self._raw_extension, datatype=self._datatype)
                 matches = query.match()
                 basenames = [match.basename for match in matches]
                 raw_list.append(', '.join(basenames))
