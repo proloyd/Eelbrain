@@ -36,7 +36,7 @@ class EpochRejection(Configuration):
     interpolation
         Enable by-epoch channel interpolation from the rejection file.
     """
-    DICT_ATTRS = ("interpolation",)
+    DICT_ATTRS = ('interpolation',)
 
     def __init__(self, interpolation: bool = True):
         self.interpolation = interpolation
@@ -104,23 +104,23 @@ class ChannelModelRejection(EpochRejection):
     --------
     Pipeline.epoch_rejection
     """
-    DICT_ATTRS = ("interpolation", "fit_threshold", "score_threshold", "max_interpolate", "raw", "continuous", "window", "hop", "min_duration", "merge_gap", "model", "alpha", "epsilon")
+    DICT_ATTRS = ('interpolation', 'fit_threshold', 'score_threshold', 'max_interpolate', 'raw', 'continuous', 'window', 'hop', 'min_duration', 'merge_gap', 'model', 'alpha', 'epsilon')
 
     def __init__(
-        self,
-        max_interpolate: int = 5,
-        fit_threshold: float = 50e-6,
-        score_threshold: float = 50e-6,
-        raw: str | None = None,
-        interpolation: bool = True,
-        continuous: float = 5.0,
-        window: float = 1.0,
-        hop: float = 0.5,
-        min_duration: float = 0.1,
-        merge_gap: float | None = None,
-        model: str = "huber",
-        alpha: float = 1e-4,
-        epsilon: float = 1.35,
+            self,
+            max_interpolate: int = 5,
+            fit_threshold: float = 50e-6,
+            score_threshold: float = 50e-6,
+            raw: str | None = None,
+            interpolation: bool = True,
+            continuous: float = 5.0,
+            window: float = 1.0,
+            hop: float = 0.5,
+            min_duration: float = 0.1,
+            merge_gap: float | None = None,
+            model: str = "huber",
+            alpha: float = 1e-4,
+            epsilon: float = 1.35,
     ):
         super().__init__(interpolation)
         self.max_interpolate = max_interpolate
@@ -226,20 +226,7 @@ class RANSACRejection(EpochRejection):
     Pipeline.epoch_rejection
     """
 
-    DICT_ATTRS = (
-        "interpolation",
-        "corr_threshold",
-        "max_interpolate",
-        "raw",
-        "continuous",
-        "window_len",
-        "min_duration",
-        "merge_gap",
-        "n_resamples",
-        "subset_size",
-        "random_seed",
-        "n_jobs",
-    )
+    DICT_ATTRS = ('interpolation', 'corr_threshold', 'max_interpolate', 'raw', 'continuous', 'window_len', 'min_duration', 'merge_gap', 'n_resamples', 'subset_size', 'random_seed', 'n_jobs')
 
     def __init__(
         self,
@@ -275,26 +262,26 @@ class RejectionInput(Input):
     key_fields = ('subject', 'session', 'acquisition', 'run', 'raw', 'epoch', 'epoch_rejection')
 
     def __init__(
-        self,
-        root: str | Path,
-        epoch_rejection: dict[str, EpochRejection | None],
-        epochs: dict[str, Any],
+            self,
+            root: str | Path,
+            epoch_rejection: dict[str, EpochRejection | None],
+            epochs: dict[str, Any],
     ):
         self.root = Path(root)
         self.epoch_rejection = epoch_rejection
         self.epochs = epochs
 
     def fingerprint(self, ctx: Request) -> dict[str, Any]:
-        rejection = self.epoch_rejection[ctx.state["epoch_rejection"]]
+        rejection = self.epoch_rejection[ctx.state['epoch_rejection']]
         if rejection is None:
-            return {"kind": "none"}
+            return {'kind': 'none'}
         return {
-            "rej": rejection,
-            "file": file_fingerprint(ctx.root, self.path(ctx)),
+            'rej': rejection,
+            'file': file_fingerprint(ctx.root, self.path(ctx)),
         }
 
     def path(self, ctx: Request) -> Path:
-        epoch = self.epochs[ctx.state["epoch"]]
+        epoch = self.epochs[ctx.state['epoch']]
         if not isinstance(epoch, PrimaryEpoch):
             raise RuntimeError(f"{epoch=}")
         return ctx.root / rej_file_path(ctx.state, epoch=epoch.name, datatype=ctx.datatype)
@@ -309,11 +296,11 @@ class ChannelModelRejectionDerivative(Derivative[Dataset]):
     name = "epoch-rejection-channel-model"
     key_fields = ("subject", "session", "acquisition", "run", "raw", "epoch", "epoch_rejection")
     # Always detect artifacts on the original reference because re-referencing transfers noise
-    fixed_state = {"reference": ""}
+    fixed_state = {'reference': ''}
     cache_policy = CachePolicy.REQUIRED
-    cache_suffix = ".pickle"
+    cache_suffix = '.pickle'
     # Options for loading epochs to fit/score the model.
-    _EPOCH_OPTIONS = {"reject": False, "ndvar": True, "data": "sensor"}
+    _EPOCH_OPTIONS = {'reject': False, 'ndvar': True, 'data': 'sensor'}
 
     def __init__(
         self,
@@ -324,32 +311,32 @@ class ChannelModelRejectionDerivative(Derivative[Dataset]):
         self.epoch_rejection = epoch_rejection
 
     def _separate_fit_raw(self, ctx: Request) -> str | None:
-        rej = self.epoch_rejection[ctx.state["epoch_rejection"]]
-        if rej.raw and rej.raw != ctx.state["raw"]:
+        rej = self.epoch_rejection[ctx.state['epoch_rejection']]
+        if rej.raw and rej.raw != ctx.state['raw']:
             return rej.raw
         return None
 
     def dependencies(self, ctx: Request) -> tuple[Dependency, ...]:
-        epoch = self.epochs[ctx.state["epoch"]]
+        epoch = self.epochs[ctx.state['epoch']]
         if not isinstance(epoch, PrimaryEpoch):
             raise RuntimeError(f"{epoch=}")
-        deps = [Dependency("epochs", label="score-epochs", options=self._EPOCH_OPTIONS)]
+        deps = [Dependency('epochs', label='score-epochs', options=self._EPOCH_OPTIONS)]
         fit_raw = self._separate_fit_raw(ctx)
         if fit_raw is not None:
-            deps.append(Dependency("epochs", label="fit-epochs", state={"raw": fit_raw}, options=self._EPOCH_OPTIONS))
+            deps.append(Dependency('epochs', label='fit-epochs', state={'raw': fit_raw}, options=self._EPOCH_OPTIONS))
         return tuple(deps)
 
     def fingerprint(self, ctx: Request) -> dict[str, Any]:
-        return {"epoch_rejection": self.epoch_rejection[ctx.state["epoch_rejection"]]}
+        return {'epoch_rejection': self.epoch_rejection[ctx.state['epoch_rejection']]}
 
     def build(self, ctx: Request) -> Dataset:
-        rej = self.epoch_rejection[ctx.state["epoch_rejection"]]
-        score_ds = ctx.load("score-epochs")
-        if "eeg" not in score_ds:
+        rej = self.epoch_rejection[ctx.state['epoch_rejection']]
+        score_ds = ctx.load('score-epochs')
+        if 'eeg' not in score_ds:
             raise ConfigurationError(f"epoch_rejection={ctx.state['epoch_rejection']!r}: ChannelModelRejection requires EEG data, but {ctx.state['subject']}/{ctx.state['epoch']} has none")
-        eeg = score_ds["eeg"]
+        eeg = score_ds['eeg']
         if self._separate_fit_raw(ctx) is not None:
-            fit_eeg = ctx.load("fit-epochs")["eeg"]
+            fit_eeg = ctx.load('fit-epochs')['eeg']
         else:
             fit_eeg = eeg
         model = ChannelModel(rej.model, alpha=rej.alpha, epsilon=rej.epsilon)
@@ -369,16 +356,16 @@ class ChannelModelRejectionDerivative(Derivative[Dataset]):
 
         scores = model.score(eeg, threshold=rej.score_threshold, max_exclude=rej.max_interpolate + 1)
         rej_ds = new_rejection_ds(score_ds, interpolation=True)
-        names = scores.get_dim("sensor").names
-        score_data = scores.get_data(("case", "sensor"))
-        accept = rej_ds["accept"]
-        tag = rej_ds["rej_tag"]
+        names = scores.get_dim('sensor').names
+        score_data = scores.get_data(('case', 'sensor'))
+        accept = rej_ds['accept']
+        tag = rej_ds['rej_tag']
         interpolate = rej_ds[INTERPOLATE_CHANNELS]
         for i in range(score_ds.n_cases):
             bad = [names[j] for j in np.flatnonzero(score_data[i] > rej.score_threshold)]
             if len(bad) > rej.max_interpolate:
                 accept[i] = False
-                tag[i] = "channel-model"
+                tag[i] = 'channel-model'
             else:
                 interpolate[i] = bad
         return rej_ds
@@ -452,14 +439,14 @@ class BadWindowsRejectionDerivative(Derivative[Dataset]):
 class RANSACRejectionDerivative(Derivative[Dataset]):
     """Cached rejection file generated by a :class:`RANSACRejection`."""
 
-    name = "epoch-rejection-ransac"
-    key_fields = ("subject", "session", "acquisition", "run", "raw", "epoch", "epoch_rejection")
+    name = 'epoch-rejection-ransac'
+    key_fields = ('subject', 'session', 'acquisition', 'run', 'raw', 'epoch', 'epoch_rejection')
     # Always detect artifacts on the original reference because re-referencing transfers noise
-    fixed_state = {"reference": ""}
+    fixed_state = {'reference': ''}
     cache_policy = CachePolicy.REQUIRED
-    cache_suffix = ".pickle"
+    cache_suffix = '.pickle'
     # Options for loading epochs to fit/score the model.
-    _EPOCH_OPTIONS = {"reject": False, "ndvar": True, "data": "sensor"}
+    _EPOCH_OPTIONS = {'reject': False, 'ndvar': True, 'data': 'sensor'}
 
     def __init__(
         self,
@@ -470,32 +457,32 @@ class RANSACRejectionDerivative(Derivative[Dataset]):
         self.epoch_rejection = epoch_rejection
 
     def _separate_fit_raw(self, ctx: Request) -> str | None:
-        rej = self.epoch_rejection[ctx.state["epoch_rejection"]]
-        if rej.raw and rej.raw != ctx.state["raw"]:
+        rej = self.epoch_rejection[ctx.state['epoch_rejection']]
+        if rej.raw and rej.raw != ctx.state['raw']:
             return rej.raw
         return None
 
     def dependencies(self, ctx: Request) -> tuple[Dependency, ...]:
-        epoch = self.epochs[ctx.state["epoch"]]
+        epoch = self.epochs[ctx.state['epoch']]
         if not isinstance(epoch, PrimaryEpoch):
             raise RuntimeError(f"{epoch=}")
-        deps = [Dependency("epochs", label="score-epochs", options=self._EPOCH_OPTIONS)]
+        deps = [Dependency('epochs', label='score-epochs', options=self._EPOCH_OPTIONS)]
         fit_raw = self._separate_fit_raw(ctx)
         if fit_raw is not None:
-            deps.append(Dependency("epochs", label="fit-epochs", state={"raw": fit_raw}, options=self._EPOCH_OPTIONS))
+            deps.append(Dependency('epochs', label='fit-epochs', state={'raw': fit_raw}, options=self._EPOCH_OPTIONS))
         return tuple(deps)
 
     def fingerprint(self, ctx: Request) -> dict[str, Any]:
-        return {"epoch_rejection": self.epoch_rejection[ctx.state["epoch_rejection"]]}
+        return {'epoch_rejection': self.epoch_rejection[ctx.state['epoch_rejection']]}
 
     def build(self, ctx: Request) -> Dataset:
-        rej = self.epoch_rejection[ctx.state["epoch_rejection"]]
-        score_ds = ctx.load("score-epochs")
-        if "eeg" not in score_ds:
+        rej = self.epoch_rejection[ctx.state['epoch_rejection']]
+        score_ds = ctx.load('score-epochs')
+        if 'eeg' not in score_ds:
             raise ConfigurationError(f"epoch_rejection={ctx.state['epoch_rejection']!r}: RANSACRejection requires EEG data, but {ctx.state['subject']}/{ctx.state['epoch']} has none")
-        eeg = score_ds["eeg"]
+        eeg = score_ds['eeg']
         if self._separate_fit_raw(ctx) is not None:
-            fit_eeg = ctx.load("fit-epochs")["eeg"]
+            fit_eeg = ctx.load('fit-epochs')['eeg']
         else:
             fit_eeg = eeg
         model = ChannelRANSACModel(window_len=rej.window_len, n_resamples=rej.n_resamples, subset_size=rej.subset_size, random_seed=rej.random_seed, n_jobs=rej.n_jobs)
@@ -517,16 +504,16 @@ class RANSACRejectionDerivative(Derivative[Dataset]):
         # boolean (unlike ChannelModel.score, which returns a continuous error)
         flagged = model.score(eeg, corr_threshold=rej.corr_threshold)
         rej_ds = new_rejection_ds(score_ds, interpolation=True)
-        names = flagged.get_dim("sensor").names
-        flagged_data = flagged.get_data(("case", "sensor"))
-        accept = rej_ds["accept"]
-        tag = rej_ds["rej_tag"]
+        names = flagged.get_dim('sensor').names
+        flagged_data = flagged.get_data(('case', 'sensor'))
+        accept = rej_ds['accept']
+        tag = rej_ds['rej_tag']
         interpolate = rej_ds[INTERPOLATE_CHANNELS]
         for i in range(score_ds.n_cases):
             bad = [names[j] for j in np.flatnonzero(flagged_data[i])]
             if len(bad) > rej.max_interpolate:
                 accept[i] = False
-                tag[i] = "ransac"
+                tag[i] = 'ransac'
             else:
                 interpolate[i] = bad
         return rej_ds
