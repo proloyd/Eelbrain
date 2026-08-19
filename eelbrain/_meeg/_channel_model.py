@@ -1,6 +1,5 @@
 # Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
 """Predict each sensor from the other sensors with per-channel regression."""
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -111,7 +110,7 @@ class ChannelModel(_BadChannelModel):
 
     def __init__(
             self,
-            model: str | BaseEstimator = "huber",
+            model: str | BaseEstimator = 'huber',
             alpha: float = 1e-4,
             epsilon: float = 1.35,
             fit_intercept: bool = True,
@@ -129,7 +128,6 @@ class ChannelModel(_BadChannelModel):
         from sklearn.compose import TransformedTargetRegressor
         from sklearn.pipeline import make_pipeline
         from sklearn.preprocessing import RobustScaler
-
         # robustly scale features and target so the fit is amplitude-invariant
         # and artifacts do not inflate the scaling
         pipeline = make_pipeline(RobustScaler(), self._make_regressor())
@@ -138,15 +136,14 @@ class ChannelModel(_BadChannelModel):
     def _make_regressor(self):
         if not isinstance(self.model, str):
             from sklearn.base import clone
-
             return clone(self.model)
         elif self.model == 'huber':
             from sklearn.linear_model import HuberRegressor
-            return HuberRegressor(epsilon=self.epsilon, alpha=self.alpha, fit_intercept=self.fit_intercept, **{"max_iter": 300, **self.kwargs})
+            return HuberRegressor(epsilon=self.epsilon, alpha=self.alpha, fit_intercept=self.fit_intercept, **{'max_iter': 300, **self.kwargs})
         elif self.model == 'ridge':
             from sklearn.linear_model import Ridge
             return Ridge(alpha=self.alpha, fit_intercept=self.fit_intercept, **self.kwargs)
-        elif self.model == "ols":
+        elif self.model == 'ols':
             from sklearn.linear_model import LinearRegression
             return LinearRegression(fit_intercept=self.fit_intercept, **self.kwargs)
         else:
@@ -180,7 +177,7 @@ class ChannelModel(_BadChannelModel):
             blocks = self._as_blocks(data)
             sensor = blocks[0].get_dim('sensor')
             n_sensors = len(sensor)
-            x = np.concatenate([self._exclude_continuous(ndvar.get_data(("sensor", "time")), ndvar.get_dim("time").tstep, threshold) for ndvar in blocks], axis=1)
+            x = np.concatenate([self._exclude_continuous(ndvar.get_data(('sensor', 'time')), ndvar.get_dim('time').tstep, threshold) for ndvar in blocks], axis=1)
         else:
             data = asndvar(data)
             if not data.has_dim('sensor'):
@@ -274,7 +271,7 @@ class ChannelModel(_BadChannelModel):
             epochs, a :class:`Datalist` with one score NDVar per epoch.
         """
         n_sensors = len(self.sensor) if self.sensor is not None else 0
-        max_n = (int(max_exclude) if max_exclude >= 1 else int(max_exclude * n_sensors))
+        max_n = int(max_exclude) if max_exclude >= 1 else int(max_exclude * n_sensors)
         if isinstance(data, list):
             blocks = self._check_blocks(data)
             out = [NDVar(self._score_block(ndvar.get_data(('sensor', 'time')), threshold, max_n), (self.sensor,), ndvar.name) for ndvar in blocks]
@@ -362,15 +359,15 @@ class ChannelModel(_BadChannelModel):
         args = (threshold, max_n, window, hop, min_duration, merge_gap)
         if isinstance(data, list):
             blocks = self._check_blocks(data)
-            out = [self._windows_for_block(ndvar.get_data(("sensor", "time")), ndvar.get_dim("time"), *args) for ndvar in blocks]
+            out = [self._windows_for_block(ndvar.get_data(('sensor', 'time')), ndvar.get_dim('time'), *args) for ndvar in blocks]
             return Datalist(out, blocks.name)
         data = self._check_data(data)
-        time = data.get_dim("time")
+        time = data.get_dim('time')
         if data.has_case:
-            x = data.get_data(("case", "sensor", "time"))
+            x = data.get_data(('case', 'sensor', 'time'))
             out = [self._windows_for_block(xi, time, *args) for xi in x]
             return Datalist(out, data.name)
-        return self._windows_for_block(data.get_data(("sensor", "time")), time, *args)
+        return self._windows_for_block(data.get_data(('sensor', 'time')), time, *args)
 
     @staticmethod
     def _exclude_continuous(
@@ -401,8 +398,7 @@ class ChannelModel(_BadChannelModel):
         xi = x
         bad = []
         while True:
-            # impute the current bad channels with their predictions
-            # (fixed point)
+            # impute the current bad channels with their predictions (fixed point)
             for _ in range(20):
                 pred = self._predict_raw(xi)
                 new = xi.copy()
@@ -565,10 +561,10 @@ class ChannelRANSACModel(_BadChannelModel):
             ref = blocks[0]
         else:
             ref = asndvar(data)
-            if not ref.has_dim("sensor"):
+            if not ref.has_dim('sensor'):
                 raise ValueError(f"{data=}: needs a sensor dimension")
         self._make_estimator()
-        self.sensor = ref.get_dim("sensor")
+        self.sensor = ref.get_dim('sensor')
         self.estimators_.fit(ref)
         return self
 
@@ -643,7 +639,7 @@ class ChannelRANSACModel(_BadChannelModel):
         if data.has_case:
             return flagged
         else:
-            return flagged.mean("time")
+            return flagged.mean('time')
 
     def find_bad_windows(
             self,
@@ -696,8 +692,8 @@ class ChannelRANSACModel(_BadChannelModel):
             return Datalist(out, blocks.name)
         data = self._check_data(data)
         if data.has_case:
-            time = data.get_dim("time")
-            x = data.get_data(("case", "sensor", "time"))
+            time = data.get_dim('time')
+            x = data.get_data(('case', 'sensor', 'time'))
             out = [self._windows_for_block(NDVar(xi, (self.sensor, time), data.name), *args) for xi in x]
             return Datalist(out, data.name)
         return self._windows_for_block(data, *args)
@@ -722,18 +718,18 @@ class ChannelRANSACModel(_BadChannelModel):
         # per-sample error from sliding-window step-down scoring
         # (sensor x time)
         block = self.estimators_.compute_correlation(data, window_len)
-        x = data.get_data(("sensor", "time"))
+        x = data.get_data(('sensor', 'time'))
         corr = np.empty_like(x)
-        time = data.get_dim("time")
+        time = data.get_dim('time')
         n_times = time.nsamples
         w = max(1, round(window_len / time.tstep))
         starts = list(range(0, max(1, n_times - w + 1), w))
         if starts[-1] != n_times - w and n_times > w:
             starts.append(n_times - w)  # make sure the last samples are covered
-        for s, b in zip(starts, block.get_data(("time", "sensor"))):
+        for s, b in zip(starts, block.get_data(('time', 'sensor'))):
             t0, t1 = s, min(s + w, n_times)
             corr[:, t0:t1] = b[:, None]
-        corr = NDVar(corr, data.get_dims(("sensor", "time")), name="RANSAC corr")
+        corr = NDVar(corr, data.get_dims(('sensor', 'time')), name="RANSAC corr")
         return corr
 
     def _windows_from_corr(
@@ -745,8 +741,8 @@ class ChannelRANSACModel(_BadChannelModel):
     ) -> list[BadChannelWindow]:
         # convert a per-sample error array (sensor x time) into bad-channel
         # windows
-        mask = corr.get_data(("sensor", "time")) < corr_threshold
-        time = corr.get_dim("time")
+        mask = corr.get_data(('sensor', 'time')) < corr_threshold
+        time = corr.get_dim('time')
         n_times = mask.shape[1]
         min_samples = max(1, round(min_duration / time.tstep))
         merge_samples = round(merge_gap / time.tstep)
@@ -882,19 +878,19 @@ class RANSACProjector:
             Transformed data with the same dimensions as ``data``.
         """
         # Decide win_samples if not provided
-        time = data.get_dim("time")
+        time = data.get_dim('time')
         sfreq = 1 / time.tstep
         if data.has_case:
             # Ignore window_len for epoched data, as we will transform
             # each epoch separately.
             win_samples = time.nsamples
-            n_times = win_samples * len(data.get_dim("case"))
-            X = data.get_data(("case", "sensor", "time"))
+            n_times = win_samples * len(data.get_dim('case'))
+            X = data.get_data(('case', 'sensor', 'time'))
             X = np.hstack(list(X))  # (n_sensors, n_times)
         else:
             win_samples = int(window_len * sfreq)
             n_times = time.nsamples
-            X = data.get_data(("sensor", "time"))
+            X = data.get_data(('sensor', 'time'))
 
         assert self.n_sensors == X.shape[0]
         if data.has_case:
@@ -932,7 +928,7 @@ class RANSACProjector:
 
         if data.has_case:
             new_X = new_X.reshape(n_blocks, self.n_sensors, win_samples)
-            transformed_data = NDVar(new_X, data.get_dims(("case", "sensor", "time")), name="RANSAC transformed", info=data.info)
+            transformed_data = NDVar(new_X, data.get_dims(('case', 'sensor', 'time')), name="RANSAC transformed", info=data.info)
         else:
             if n_blocks:
                 new_X = np.hstack(new_X.reshape(n_blocks, self.n_sensors, win_samples))
@@ -941,7 +937,7 @@ class RANSACProjector:
             if last_window is not None:
                 new_X = np.hstack([new_X, last_window])
             time = UTS(time.tmin, time.tstep, new_X.shape[-1])
-            transformed_data = NDVar(new_X, data.get_dims(("sensor", "time")), name="RANSAC transformed", info=data.info)
+            transformed_data = NDVar(new_X, data.get_dims(('sensor', 'time')), name="RANSAC transformed", info=data.info)
         return transformed_data
 
     def compute_correlation(
@@ -951,19 +947,19 @@ class RANSACProjector:
     ) -> np.ndarray:
         # --- per-window correlation ---
         # Decide win_samples if not provided
-        time = data.get_dim("time")
+        time = data.get_dim('time')
         sfreq = 1 / time.tstep
         if data.has_case:
             # Ignore window_len for epoched data, as we will compute
             # correlation for each epoch separately.
             win_samples = time.nsamples
-            n_times = win_samples * len(data.get_dim("case"))
-            X = data.get_data(("case", "sensor", "time"))
+            n_times = win_samples * len(data.get_dim('case'))
+            X = data.get_data(('case', 'sensor', 'time'))
             X = np.hstack(list(X))  # (n_sensors, n_times)
         else:
             win_samples = int(window_len * sfreq)
             n_times = time.nsamples
-            X = data.get_data(("sensor", "time"))
+            X = data.get_data(('sensor', 'time'))
 
         assert self.n_sensors == X.shape[0]
         if n_times < win_samples:
@@ -1004,10 +1000,10 @@ class RANSACProjector:
             corrs = np.vstack([corrs, last_corr])
 
         if data.has_case:
-            corrs = NDVar(corrs, (data.get_dim("case"), data.get_dim("sensor")), name="RANSAC correlation", info=data.info)
+            corrs = NDVar(corrs, (data.get_dim('case'), data.get_dim('sensor')), name="RANSAC correlation", info=data.info)
         else:
             window = UTS(window_len / 2, window_len, n_windows)
-            corrs = NDVar(corrs.T, (data.get_dim("sensor"), window), name="RANSAC correlation", info=data.info)
+            corrs = NDVar(corrs.T, (data.get_dim('sensor'), window), name="RANSAC correlation", info=data.info)
         return corrs
 
     @staticmethod
