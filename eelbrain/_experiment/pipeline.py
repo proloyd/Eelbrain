@@ -3196,7 +3196,7 @@ class Pipeline(StateModel):
 
     def _eval_parc(self, parc: str) -> str:
         if not parc:
-            return ""
+            return ''
         if parc in self._parcs:
             if isinstance(self._parcs[parc], SeededParc):
                 raise ValueError(f"Seeded parc set without size, use e.g. parc='{parc}-25'")
