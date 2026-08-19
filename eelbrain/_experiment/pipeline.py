@@ -3462,7 +3462,7 @@ class Pipeline(StateModel):
             ds = Dataset()
             ds['subject'] = Factor(rows_subj)
             if has_sessions:
-                ds["session"] = Factor(rows_ses)
+                ds['session'] = Factor(rows_ses)
             ds['task'] = Factor(rows_task)
             if has_runs:
                 ds['run'] = Factor(rows_run)
