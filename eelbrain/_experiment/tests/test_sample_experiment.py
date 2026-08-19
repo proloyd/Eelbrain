@@ -30,20 +30,20 @@ from eelbrain.testing import assert_dataobj_equal, requires_mne_sample_data
 
 
 def _test_result_manifest_path(
-    e,
-    test: str,
-    tstart: float,
-    tstop: float,
-    pmin,
-    *,
-    node: str = 'test-result',
-    samples: int,
-    data: str,
-    disconnect_labels: bool = False,
-    baseline=True,
-    src_baseline=None,
-    smooth=None,
-    samplingrate=None,
+        e,
+        test: str,
+        tstart: float,
+        tstop: float,
+        pmin,
+        *,
+        node: str = 'test-result',
+        samples: int,
+        data: str,
+        disconnect_labels: bool = False,
+        baseline=True,
+        src_baseline=None,
+        smooth=None,
+        samplingrate=None,
 ) -> Path:
     options = {
         'data': DataSpec.coerce(data),
@@ -80,12 +80,12 @@ def samples_experiment(_samples_templates, tmp_path):
     counter = itertools.count()
 
     def make(
-        n_subjects: int = 3,
-        n_tasks: int = 1,
-        n_segments: int = 4,
-        n_runs: int = 1,
-        mris: bool = False,
-        pick: str = 'mag',
+            n_subjects: int = 3,
+            n_tasks: int = 1,
+            n_segments: int = 4,
+            n_runs: int = 1,
+            mris: bool = False,
+            pick: str = 'mag',
     ) -> str:
         if not mne.datasets.has_dataset("sample"):
             pytest.skip("mne sample data unavailable")
@@ -221,7 +221,7 @@ def test_sample(samples_experiment):
     meg_mean = combine(meg.mean('sensor') for meg in megs).mean('case', name='auditory')
     assert_dataobj_equal(res.c1_mean, meg_mean, decimal=21)
     res = e.load_test('a>v', 0.05, 0.2, 0.05, samples=20, inv='', baseline=False)
-    assert res.p.min() == pytest.approx(0.143, abs=0.001)
+    assert res.p.min() == pytest.approx(.143, abs=.001)
     assert res.difference.max() == pytest.approx(4.47e-13, 1e-15)
     # plot (skip to avoid using framework build)
     # e.plot_evoked(1, epoch='target', model='')
@@ -702,7 +702,7 @@ def test_ica_all_tasks_after_maxwell(samples_experiment):
 
     class Experiment(SampleExperiment):
         raw = {
-            'tsss': RawMaxwell('raw', st_duration=10.0, ignore_ref=True, st_correlation=0.9, st_only=True, st_overlap=False),
+            'tsss': RawMaxwell('raw', st_duration=10., ignore_ref=True, st_correlation=.9, st_only=True, st_overlap=False),
             'ica': RawICA('tsss', method='fastica', max_iter=1, n_components=0.95),
             **SampleExperiment.raw,
         }
@@ -827,7 +827,7 @@ def test_interpolate_bads_after_ica(samples_experiment):
     bad = 'EEG 003'
     e.make_bad_channels(bad)  # bad before fit -> excluded from the ICA decomposition
     with catch_warnings():
-        filterwarnings('ignore', 'FastICA did not converge', UserWarning)
+        filterwarnings('ignore', "FastICA did not converge", UserWarning)
         e.make_ica()
 
     # the channel is excluded from the ICA, so it is absent from ica.info['bads']
@@ -933,7 +933,7 @@ def test_channel_model_rejection(samples_experiment):
     n_rejected = int((~rej_ds['accept']).sum())
     n_interp = sum(1 for x in rej_ds[INTERPOLATE_CHANNELS] if x)
     assert n_rejected > 0  # some epochs rejected (> max_interpolate bad channels)
-    assert n_interp > 0  # some epochs have channels marked for interpolation
+    assert n_interp > 0    # some epochs have channels marked for interpolation
     assert max(len(x) for x in rej_ds[INTERPOLATE_CHANNELS]) <= 2  # never exceeds max_interpolate
     assert set(rej_ds['rej_tag'][~rej_ds['accept'].x]) == {'channel-model'}
 
@@ -1035,7 +1035,7 @@ def test_channel_model_rejection_variable_length(samples_experiment):
         zeroed = n_bad > max_interpolate
         if zeroed.any():
             zeroed_any = True
-            assert_array_equal(y1.x[:, zeroed], 0.0)
+            assert_array_equal(y1.x[:, zeroed], 0.)
         for ci, ch in enumerate(y0.sensor.names):
             spans = bad_by_channel.get(ch, [])
             inside = np.zeros(y0.time.nsamples, bool)
@@ -1463,8 +1463,8 @@ def test_raw_reader_warnings_are_summarized(monkeypatch, samples_experiment):
     original = mne.io.read_raw_fif
 
     def read_raw_fif(*args, **kwargs):
-        warnings.warn('Synthetic raw reader warning 1', RuntimeWarning)
-        warnings.warn('Synthetic raw reader warning 2', RuntimeWarning)
+        warnings.warn("Synthetic raw reader warning 1", RuntimeWarning)
+        warnings.warn("Synthetic raw reader warning 2", RuntimeWarning)
         return original(*args, **kwargs)
 
     monkeypatch.setattr(mne.io, 'read_raw_fif', read_raw_fif)
@@ -1530,7 +1530,7 @@ def test_evoked_cached_load_bypasses_epochs(monkeypatch, samples_experiment):
     epochs_node = e._derivatives._get_node('epochs')
 
     def fail(*args, **kwargs):
-        raise AssertionError('Evoked dataset load should not rebuild epochs on an evoked cache hit')
+        raise AssertionError("Evoked dataset load should not rebuild epochs on an evoked cache hit")
 
     monkeypatch.setattr(epochs_node, 'load', fail)
     monkeypatch.setattr(epochs_node, 'build', fail)
@@ -1563,7 +1563,7 @@ def test_evoked_cached_load_applies_cat_without_rebuilding_epochs(monkeypatch, s
     epochs_node = e._derivatives._get_node('epochs')
 
     def fail(*args, **kwargs):
-        raise AssertionError('Evoked dataset load should not rebuild epochs on an evoked cache hit')
+        raise AssertionError("Evoked dataset load should not rebuild epochs on an evoked cache hit")
 
     monkeypatch.setattr(epochs_node, 'load', fail)
     monkeypatch.setattr(epochs_node, 'build', fail)
@@ -1602,6 +1602,7 @@ def test_evoked_cache_ignores_irrelevant_selected_events_changes(samples_experim
     assert e._resolve_derivative('evoked', options={'model': 'side'}).is_valid()
 
     class SampleExperimentModified(SampleExperiment):
+
         variables = {
             **SampleExperiment.variables,
             'side': LabelVar('value', {(1, 3): 'left_', (2, 4): 'right_'}),
@@ -1931,7 +1932,7 @@ def test_selected_events_vardef_is_local(samples_experiment):
     _ = handle.load()
 
     assert 'vardef' not in handle.current_fingerprint()
-    with pytest.raises(TypeError, match='undeclared option'):
+    with pytest.raises(TypeError, match="undeclared option"):
         e._resolve_derivative('epoch-events', options={**options, 'vardef': compact})
 
     ds_compact = e.load_selected_events(vardef=compact)
@@ -2062,6 +2063,7 @@ def test_sample_eeg(samples_experiment):
     root = samples_experiment(2, 1, 1, pick='eeg')
 
     class Experiment(Pipeline):
+
         raw = {
             'av-ref': RawReReference('raw'),
         }
@@ -2090,7 +2092,7 @@ def test_load_trf(samples_experiment):
     assert isinstance(res, BoostingResult)
 
     # cache hit
-    options = e._trf_options('imp', 0.0, 0.1, 'boosting', None, None, None, False, {})
+    options = e._trf_options('imp', 0., 0.1, 'boosting', None, None, None, False, {})
     assert e._resolve_derivative('trf', options=options).is_valid()
 
     # path
@@ -2110,7 +2112,7 @@ def test_load_trf(samples_experiment):
     path.unlink()
     spec.ctx.manifest_path.unlink(missing_ok=True)
     assert not spec.is_done
-    result = pickle.loads(pickle.dumps(spec.make_job())).fit()  # 'off-host'
+    result = pickle.loads(pickle.dumps(spec.make_job())).fit()  # "off-host"
     spec.save_result(result)
     assert spec.is_done
     assert path.exists()
@@ -2136,7 +2138,7 @@ def test_predictor_subset_fingerprint(samples_experiment):
 
     def write(stim, value, unused):
         # a NUTS Dataset predictor with a bool mask and an extra column ('unused') the term ignores
-        ds = Dataset({'time': Var([0.0, 0.1, 0.2, 0.3, 0.4]), 'value': Var(value), 'mask': Var(np.array([True, True, True, True, False])), 'unused': Var(unused)})
+        ds = Dataset({'time': Var([0., .1, .2, .3, .4]), 'value': Var(value), 'mask': Var(np.array([True, True, True, True, False])), 'unused': Var(unused)})
         path = pdir / f'{stim}~word.pickle'
         save.pickle(ds, path)
         mtime[0] += 1  # ensure the quick (mtime) fingerprint changes between writes
@@ -2145,17 +2147,17 @@ def test_predictor_subset_fingerprint(samples_experiment):
     def read_reference(stim):
         return json.loads((ref_dir / f'{stim}~word-value-mask.json').read_text())
 
-    ones = [1.0, 1.0, 1.0, 1.0, 1.0]
+    ones = [1., 1., 1., 1., 1.]
     for stim in ('auditory', 'visual'):
-        write(stim, ones, [0.0, 0.0, 0.0, 0.0, 0.0])
+        write(stim, ones, [0., 0., 0., 0., 0.])
 
     # bare key = intercept: unit impulse at each time stamp
     x = e.load_predictor('auditory~word', 0.1)
-    assert x.sum() == 5.0
+    assert x.sum() == 5.
 
     res = e.load_trf('word-value-mask', 0, 0.1, samplingrate=samplingrate)
     assert isinstance(res, BoostingResult)
-    options = e._trf_options('word-value-mask', 0.0, 0.1, 'boosting', None, None, samplingrate, False, {})
+    options = e._trf_options('word-value-mask', 0., 0.1, 'boosting', None, None, samplingrate, False, {})
     ctx = e._resolve_derivative('trf', options=options)
     assert ctx.is_valid()
 
@@ -2168,14 +2170,14 @@ def test_predictor_subset_fingerprint(samples_experiment):
     assert version_0['serial'] == 0
 
     # editing only the unused column (new mtime, same relevant data) keeps the TRF valid
-    write('auditory', ones, [9.0, 9.0, 9.0, 9.0, 9.0])
+    write('auditory', ones, [9., 9., 9., 9., 9.])
     assert e._resolve_derivative('trf', options=options).is_valid()
     reference = read_reference('auditory')
     assert reference['version'] == version_0  # same data → same version
     assert reference['source']['mtime'] == mtime[0]  # refreshed for the fast path
 
     # editing a used column (value) invalidates the TRF and bumps the serial
-    write('auditory', [2.0, 2.0, 2.0, 2.0, 2.0], [9.0, 9.0, 9.0, 9.0, 9.0])
+    write('auditory', [2., 2., 2., 2., 2.], [9., 9., 9., 9., 9.])
     assert not e._resolve_derivative('trf', options=options).is_valid()
     assert read_reference('auditory')['version'] == {'uid': version_0['uid'], 'serial': 1}
 
@@ -2185,7 +2187,7 @@ def test_predictor_subset_fingerprint(samples_experiment):
     reference = read_reference('auditory')
     (ref_dir / reference['data_file']).unlink()
     (ref_dir / 'auditory~word-value-mask.json').unlink()
-    write('auditory', [2.0, 2.0, 2.0, 2.0, 2.0], [9.0, 9.0, 9.0, 9.0, 9.0])  # touch to force a quick-fingerprint mismatch
+    write('auditory', [2., 2., 2., 2., 2.], [9., 9., 9., 9., 9.])  # touch to force a quick-fingerprint mismatch
     assert not e._resolve_derivative('trf', options=options).is_valid()
     version_new = read_reference('auditory')['version']
     assert version_new['serial'] == 0
@@ -2205,7 +2207,7 @@ def test_load_trf_source(samples_experiment):
     e.set(subject='R0000', epoch='target', epoch_rejection='', raw='1-40', src='ico-2', parc='ac')
     res = e.load_trf('imp', 0, 0.1)
     assert isinstance(res, BoostingResult)
-    assert e._resolve_derivative('trf', options=e._trf_options('imp', 0.0, 0.1, 'boosting', None, None, None, False, {})).is_valid()
+    assert e._resolve_derivative('trf', options=e._trf_options('imp', 0., 0.1, 'boosting', None, None, None, False, {})).is_valid()
 
 
 @requires_mne_sample_data
