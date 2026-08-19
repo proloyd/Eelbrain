@@ -226,7 +226,7 @@ class Pipeline(StateModel):
         # Combinations
         'lobes': EelbrainParc(True, ('lateral', 'medial')),
         'lobes-op': CombinationParc('lobes', {'occipitoparietal': "occipital + parietal"}, ('lateral', 'medial')),
-        "lobes-ot": CombinationParc('lobes', {'occipitotemporal': "occipital + temporal"}, ('lateral', 'medial')),
+        'lobes-ot': CombinationParc('lobes', {'occipitotemporal': "occipital + temporal"}, ('lateral', 'medial')),
     }
     parcs: dict[str, Parcellation] = {}
 
