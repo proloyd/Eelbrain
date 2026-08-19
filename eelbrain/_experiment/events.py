@@ -121,7 +121,6 @@ class EventsInput(Input[Dataset]):
     :meth:`~Pipeline.label_events`.
 
     """
-
     name = 'events-input'
     key_fields = ('subject', 'session', 'task', 'acquisition', 'run')
 
@@ -164,7 +163,6 @@ def _check_ds(ds: Dataset, source: str, info: dict[str, Any]) -> Dataset:
 
 class EventsDerivative(Derivative[Dataset]):
     """Extract events form M/EEG data files"""
-
     name = 'events'
     key_fields = ('subject', 'session', 'task', 'acquisition', 'run', 'raw')
     cache_suffix = '.pickle'
@@ -260,7 +258,6 @@ class LabeledEventsDerivative(Derivative[Dataset]):
     the correct choice when ``label_events`` reads external files whose changes
     cannot be detected without executing the hook.
     """
-
     name = 'labeled-events'
     key_fields = ('subject', 'session', 'task', 'acquisition', 'run', 'raw')
     cache_suffix = '.pickle'
@@ -347,7 +344,6 @@ class SelectedEventsDerivative(UncachedDerivative[Dataset]):
     Always restricted to one task/run combination; multi-run aggregation is
     handled by :class:`EpochEventsDerivative`.
     """
-
     name = 'selected-events'
     key_fields = ('subject', 'session', 'acquisition', 'run', 'raw', 'epoch', 'epoch_rejection')
     key_options = {
@@ -504,7 +500,6 @@ class EpochEventsDerivative(UncachedDerivative[Dataset]):
     reject
         Whether to apply artifact rejection (``True``, ``False``, or ``'keep'``).
     """
-
     name = 'epoch-events'
     key_fields = ('subject', 'session', 'acquisition', 'epoch', 'raw', 'epoch_rejection')
     key_options = {
@@ -545,15 +540,19 @@ class EpochEventsDerivative(UncachedDerivative[Dataset]):
         elif isinstance(epoch, (PrimaryEpoch, SecondaryEpoch, ContinuousEpoch)) and runs:
             # Combine-all: per-run selected-events; index applied after combining
             rec_options = ctx.options_for('selected-events', 'reject', *EPOCH_EXTRACT_OPTIONS)
-            return tuple(Dependency('selected-events', label=f"selected-events-{run}", state={'task': epoch.task, 'run': run}, options=rec_options) for run in runs)
+            return tuple(
+                Dependency('selected-events', label=f"selected-events-{run}",
+                           state={'task': epoch.task, 'run': run}, options=rec_options)
+                for run in runs
+            )
         elif isinstance(epoch, (PrimaryEpoch, SecondaryEpoch, ContinuousEpoch)):
             return (Dependency('selected-events', state={'task': epoch.task, 'run': single_recording_run(self.epochs, epoch)},
-                    options=ctx.options_for('selected-events', 'reject', *EPOCH_EXTRACT_OPTIONS)),)
+                               options=ctx.options_for('selected-events', 'reject', *EPOCH_EXTRACT_OPTIONS)),)
         else:
             options = ctx.options_for('epoch-events', 'reject', *EPOCH_EXTRACT_OPTIONS)
             if isinstance(epoch, SuperEpoch):
                 return tuple(
-                    Dependency('epoch-events', label=f"{sub_epoch}:events", options=options,
+                    Dependency('epoch-events', label=f'{sub_epoch}:events', options=options,
                                state={'epoch': sub_epoch, 'task': self.epochs[sub_epoch].task})
                     for sub_epoch in epoch.sub_epochs
                 )
