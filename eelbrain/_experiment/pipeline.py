@@ -2566,7 +2566,7 @@ class Pipeline(StateModel):
         else:
             current = tuple(self.get(f) for f in field)
             values = list(product(*(self.get_field_values(f) for f in field)))
-            def fmt(x): return "/".join(x)
+            def fmt(x): return '/'.join(x)
 
         # find the index of the next value
         if current in values:
