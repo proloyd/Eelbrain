@@ -1185,7 +1185,7 @@ class Pipeline(StateModel):
     def load_predictor(
             self,
             code: str,
-            tstep: float = 0.1,
+            tstep: float = 0.01,
             n_samples: int = None,
             tmin: float = None,
             filter_x: bool | Literal['continuous'] = False,
