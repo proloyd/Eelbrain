@@ -541,7 +541,7 @@ class EpochEventsDerivative(UncachedDerivative[Dataset]):
             # Combine-all: per-run selected-events; index applied after combining
             rec_options = ctx.options_for('selected-events', 'reject', *EPOCH_EXTRACT_OPTIONS)
             return tuple(
-                Dependency('selected-events', label=f"selected-events-{run}",
+                Dependency('selected-events', label=f'selected-events-{run}',
                            state={'task': epoch.task, 'run': run}, options=rec_options)
                 for run in runs
             )
@@ -560,7 +560,7 @@ class EpochEventsDerivative(UncachedDerivative[Dataset]):
                 raise RuntimeError(f"{epoch=}")
 
     def fingerprint(self, ctx: Request) -> dict[str, Any]:
-        return {"epoch": self.epochs[ctx.state['epoch']]}
+        return {'epoch': self.epochs[ctx.state['epoch']]}
 
     def build(self, ctx: Request) -> Dataset:
         epoch = self.epochs[ctx.state['epoch']]
