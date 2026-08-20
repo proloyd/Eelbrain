@@ -485,7 +485,7 @@ class Pipeline(StateModel):
         self._register_field('adjacency', ('', 'link-midline'), allow_empty=True)
 
         # # slave fields
-        self._register_field("mrisubject", depends_on=("mri", 'subject'), slave_handler=self._update_mrisubject, repr=False)
+        self._register_field('mrisubject', depends_on=('mri', 'subject'), slave_handler=self._update_mrisubject, repr=False)
 
         # Initialize dependency tree
         self._init_derivative_registry()
