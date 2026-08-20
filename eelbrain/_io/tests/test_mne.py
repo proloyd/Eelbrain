@@ -251,6 +251,11 @@ def test_factor_trigger_to_var():
     assert len(var) == 0
     assert event_id == {}
 
+    # two labels that hash to the same CRC32 code raise instead of silently merging
+    factor = Factor(['ze4sErsGQplO', 'aR0uxf58kQj3'])
+    with pytest.raises(RuntimeError):
+        _factor_trigger_to_var(factor)
+
 
 @requires_mne_sample_data
 @pytest.mark.filterwarnings("ignore:The measurement information")

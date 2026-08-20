@@ -602,8 +602,21 @@ def _factor_trigger_to_var(factor: Factor) -> tuple[Var, dict[str, int]]:
     Also returns the label -> code mapping, for use as the ``event_id`` of
     the resulting :class:`mne.Epochs`, so the original string labels remain
     available to code that works with the raw ``mne.Epochs`` object directly.
+
+    Raises
+    ------
+    RuntimeError
+        If two distinct labels hash to the same code (astronomically
+        unlikely for realistic label counts, but would otherwise silently
+        merge two different conditions into one ``event_id``).
     """
     code_of = {label: zlib.crc32(label.encode()) & 0x7FFFFFFF for label in factor.cells}  # mask to a non-negative value that fits in int32
+    if len(set(code_of.values())) != len(code_of):
+        codes = {}
+        for label, code in code_of.items():
+            codes.setdefault(code, []).append(label)
+        collisions = [labels for labels in codes.values() if len(labels) > 1]
+        raise RuntimeError(f"CRC32 collision between trigger labels {collisions}: these would be assigned the same numeric code")
     return factor.as_var(code_of), code_of
 
 
