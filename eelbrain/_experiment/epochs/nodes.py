@@ -567,7 +567,7 @@ class EvokedDerivative(Derivative[list[mne.Evoked]]):
         model_vars = model.split('%') if model else ()
         for evoked, *cell in data.zip('evoked', *model_vars):
             evoked.info['description'] = "Eelbrain"
-            evoked.comment = ' | '.join(cell)
+            evoked.comment = ' | '.join(str(c) for c in cell)
         return data['evoked']
 
     @staticmethod
@@ -623,7 +623,7 @@ class EvokedDerivative(Derivative[list[mne.Evoked]]):
 
         # Unpack evoked objects and map them to the ds rows
         model_vars = model.split('%') if model else ()
-        cells = [' | '.join(cell) or 'No comment' for cell in ds.zip(*model_vars)] if model_vars else ['No comment']
+        cells = [' | '.join(str(c) for c in cell) or 'No comment' for cell in ds.zip(*model_vars)] if model_vars else ['No comment']
         evoked_by_cell = dict(zip(_evoked_comments(evoked), evoked))
         if len(evoked_by_cell) != len(evoked):
             raise RuntimeError(f"Cached evoked data contains duplicate comments: {_evoked_comments(evoked)!r}")

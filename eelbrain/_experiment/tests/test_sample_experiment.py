@@ -2057,6 +2057,48 @@ def test_epoch_run(samples_experiment):
 
 
 @requires_mne_sample_data
+def test_load_evoked_numeric_model(samples_experiment):
+    """load_evoked(model=...) with a numeric (Var), not Factor, grouping variable.
+
+    Regression test: EpochEvokedDerivative.build() and .apply_view_options()
+    (eelbrain/_experiment/epochs/nodes.py) both did ``' | '.join(cell)`` to
+    build a per-condition label/lookup key from the model variable(s)'
+    values, which raised ``TypeError: sequence item 0: expected str
+    instance, numpy.int64 found`` whenever a model variable was numeric
+    rather than a string-valued Factor like the sample experiment's usual
+    'side'/'modality'. Uses a custom numeric ``EvalVar`` (mirroring how
+    'side'/'modality' are registered, just producing a Var instead of a
+    Factor) so the variable reliably survives into the internal Dataset
+    that EpochEvokedDerivative.build() aggregates.
+    """
+    set_log_level('warning', 'mne')
+    from eelbrain._experiment.tests.sample_experiment import SampleExperiment
+
+    root = samples_experiment(1, 1)
+
+    class Experiment(SampleExperiment):
+        variables = {
+            **SampleExperiment.variables,
+            'value_num': EvalVar('value'),
+        }
+
+    e = Experiment(root)
+    e.set(subject='R0000', epoch='target')
+
+    # first call: exercises build()'s join/comment assignment
+    ds = e.load_evoked(model='value_num', ndvar=False)
+    assert ds.n_cases > 1
+    for value, evoked in ds.zip('value_num', 'evoked'):
+        assert evoked.comment == str(value)
+
+    # second call: cache hit, exercises apply_view_options()'s matching join
+    ds2 = e.load_evoked(model='value_num', ndvar=False)
+    assert list(ds2['value_num']) == list(ds['value_num'])
+    for value, evoked in ds2.zip('value_num', 'evoked'):
+        assert evoked.comment == str(value)
+
+
+@requires_mne_sample_data
 def test_sample_eeg(samples_experiment):
     set_log_level('warning', 'mne')
 
