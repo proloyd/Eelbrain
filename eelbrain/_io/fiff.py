@@ -607,7 +607,11 @@ def _factor_trigger_to_var(factor: Factor) -> tuple[Var, dict[str, int]]:
     return factor.as_var(code_of), code_of
 
 
-def _resolve_trigger(ds, trigger, event_id):
+def _resolve_trigger(
+        ds: Dataset,
+        trigger: str | Var | Factor | None,
+        event_id: dict[str, int] | None,
+) -> tuple[Var | None, dict[str, int] | None]:
     """Resolve a trigger spec to a numeric trigger plus a matching event_id.
 
     A Factor-valued trigger (e.g. from a pipeline's label_events overwriting
@@ -616,6 +620,29 @@ def _resolve_trigger(ds, trigger, event_id):
     mapping is used (every label present in the Factor must be a key);
     otherwise both the numeric trigger and the event_id are derived from the
     Factor's own labels.
+
+    Parameters
+    ----------
+    ds
+        Dataset used to look up ``trigger`` when it is given as a column
+        name.
+    trigger
+        The trigger, as a column name, an already numeric :class:`Var`, a
+        :class:`Factor` (converted here), or ``None`` (every event gets the
+        code 1, see :func:`_mne_events`).
+    event_id
+        Caller-supplied label -> code mapping, if any. ``None`` unless the
+        caller already knows the codes it wants.
+
+    Returns
+    -------
+    trigger
+        The resolved, numeric trigger (or ``None``, unchanged, if ``trigger``
+        was ``None``).
+    event_id
+        ``event_id``, unchanged, unless it was derived from a Factor-valued
+        ``trigger`` or dropped (with a warning) for being incompatible with a
+        ``None`` trigger.
     """
     if isinstance(trigger, str):
         trigger = ds[trigger]
