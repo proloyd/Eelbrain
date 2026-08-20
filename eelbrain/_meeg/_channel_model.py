@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from joblib import Parallel, delayed
+from joblib import Parallel, delayed, effective_n_jobs
 import numpy as np
 
 from .._data_obj import Datalist, NDVar, NDVarArg, UTS, asndvar
@@ -807,7 +807,11 @@ class RANSACProjector:
         self.alpha = alpha
         self._rng = np.random.default_rng(random_seed)
         self._workers = Parallel(n_jobs=n_jobs)
-        self._n_splits = min(self._workers.n_jobs, n_resamples)
+        # Parallel.n_jobs stores the raw constructor argument (e.g. -1, -2,
+        # None), not a resolved worker count, so it can't be used directly
+        # in min()/array_split() below - resolve it once via effective_n_jobs.
+        self._n_jobs = effective_n_jobs(n_jobs)
+        self._n_splits = min(self._n_jobs, n_resamples)
 
     def fit(self, data: NDVar) -> RANSACProjector:
         """Fit the RANSAC projector to the channel positions.
@@ -903,7 +907,7 @@ class RANSACProjector:
         n_blocks = len(offsets)
 
         if n_blocks:
-            n_splits = min(self._workers.n_jobs, n_blocks)
+            n_splits = min(self._n_jobs, n_blocks)
             offsets_splits = np.array_split(offsets, n_splits)
             new_X = self._workers(
                 delayed(self._transform_window)(
@@ -974,7 +978,7 @@ class RANSACProjector:
         n_windows = len(offsets)
 
         if n_windows:
-            n_splits = min(self._workers.n_jobs, n_windows)
+            n_splits = min(self._n_jobs, n_windows)
             offsets_splits = np.array_split(offsets, n_splits)
             corrs = self._workers(
                 delayed(self._compute_correlation_window)(

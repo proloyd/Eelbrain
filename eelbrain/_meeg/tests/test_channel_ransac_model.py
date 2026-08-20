@@ -144,6 +144,34 @@ def test_ransac_find_bad_windows():
     assert w.tmax == pytest.approx(4.0)
 
 
+def test_ransac_negative_n_jobs():
+    """n_jobs<0 (joblib's "all/all-but-N cores" convention) used to crash.
+
+    Parallel.n_jobs stores the raw constructor argument (e.g. -1, -2), not a
+    resolved worker count; RANSACProjector used to pass that raw value
+    directly to min()/np.array_split(), which raised
+    ``ValueError: number sections must be larger than 0.`` for any negative
+    n_jobs. Exercises both the whole-epoch fit() path and the windowed
+    find_bad_windows() path (the two independent call sites of the same
+    pattern), and checks n_jobs=-1 doesn't change results (only splits the
+    same deterministic work across workers).
+    """
+    rng = np.random.default_rng(0)
+    block = _block(1000, rng)
+    bad = _inject(block, 'Cz', 300, 400, rng)
+
+    model_serial = ChannelRANSACModel(**RANSAC_KWARGS, n_jobs=1)
+    model_serial.fit(block)
+    windows_serial = model_serial.find_bad_windows(bad, window_len=1.0, corr_threshold=0.75, min_duration=0.05)
+
+    model_parallel = ChannelRANSACModel(**RANSAC_KWARGS, n_jobs=-1)
+    model_parallel.fit(block)
+    windows_parallel = model_parallel.find_bad_windows(bad, window_len=1.0, corr_threshold=0.75, min_duration=0.05)
+
+    assert {w.channel for w in windows_parallel} == {'Cz'}
+    assert [(w.channel, w.tmin, w.tmax) for w in windows_parallel] == [(w.channel, w.tmin, w.tmax) for w in windows_serial]
+
+
 # --- API parity with ChannelModel -------------------------------------------------------------
 
 def _make_models():
