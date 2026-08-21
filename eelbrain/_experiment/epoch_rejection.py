@@ -304,6 +304,18 @@ class ChannelModelRejectionDerivative(Derivative[Dataset]):
         self.epochs = epochs
         self.epoch_rejection = epoch_rejection
 
+    def override_key_fields(self, ctx: Request) -> tuple[str, ...] | None:
+        # For a combine-all-runs epoch, the 'epochs' dependency this node
+        # fits/scores against already pools every run (EpochEventsDerivative
+        # ignores ctx.state['run'] for such epochs; its own key_fields don't
+        # include 'run' either) - so keying on 'run' here would only split
+        # one identical fit/score result across N redundant cache entries,
+        # one per run, instead of sharing it.
+        epoch = self.epochs[ctx.state['epoch']]
+        if epoch.run is None:
+            return tuple(f for f in self.key_fields if f != 'run')
+        return None
+
     def _separate_fit_raw(self, ctx: Request) -> str | None:
         rej = self.epoch_rejection[ctx.state['epoch_rejection']]
         if rej.raw and rej.raw != ctx.state['raw']:
@@ -449,6 +461,17 @@ class RANSACRejectionDerivative(Derivative[Dataset]):
     ):
         self.epochs = epochs
         self.epoch_rejection = epoch_rejection
+
+    def override_key_fields(self, ctx: Request) -> tuple[str, ...] | None:
+        # See ChannelModelRejectionDerivative.override_key_fields: the
+        # 'epochs' dependency this node fits/scores against already pools
+        # every run for a combine-all-runs epoch, so keying on 'run' here
+        # would only split one identical fit/score result across N
+        # redundant cache entries instead of sharing it.
+        epoch = self.epochs[ctx.state['epoch']]
+        if epoch.run is None:
+            return tuple(f for f in self.key_fields if f != 'run')
+        return None
 
     def _separate_fit_raw(self, ctx: Request) -> str | None:
         rej = self.epoch_rejection[ctx.state['epoch_rejection']]

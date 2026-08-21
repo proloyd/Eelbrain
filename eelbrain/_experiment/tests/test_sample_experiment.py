@@ -1438,6 +1438,67 @@ def test_bad_windows_rejection_combine_all_runs(samples_experiment):
 
 
 @requires_mne_sample_data
+def test_ransac_and_channel_model_rejection_dedup_across_runs(samples_experiment, monkeypatch):
+    """RANSAC/ChannelModel rejection is fit once, not once per run, for a
+    combine-all-runs epoch: the underlying 'epochs' dependency already pools
+    every run, so a per-run cache slot would just store N copies of one
+    identical fit/score result. BadWindowsRejection is the counter-check:
+    it has extra per-run dependencies (clean-windows, raw info), so it must
+    keep keying on 'run' -- this guards against "fixing" that one too.
+    """
+    set_log_level('warning', 'mne')
+    from eelbrain._experiment.tests.sample_experiment import SampleExperiment
+    from eelbrain._meeg import ChannelModel
+    from eelbrain._meeg._channel_model import ChannelRANSACModel
+
+    root = samples_experiment(1, 1, n_runs=2, pick='')  # keep EEG channels
+
+    class Experiment(SampleExperiment):
+        raw = {
+            **SampleExperiment.raw,
+            'windows': RawCleanWindows('raw', window_len=0.5, zthresholds=(-2.0, 2.0)),
+        }
+        epoch_rejection = {
+            'ransac': RANSACRejection(**RANSAC_REJECTION_KWARGS),
+            'channel-model': ChannelModelRejection(model='ridge', fit_threshold=None, score_threshold=2e-5, max_interpolate=30),
+            'bad-windows': BadWindowsRejection(raw='windows', max_interpolate=2),
+        }
+
+    e = Experiment(root)
+    e.set(subject='R0000', raw='raw', epoch='target')
+
+    for rej_name, node_name, fit_cls in (
+            ('ransac', 'epoch-rejection-ransac', ChannelRANSACModel),
+            ('channel-model', 'epoch-rejection-channel-model', ChannelModel),
+    ):
+        calls = []
+        orig_fit = fit_cls.fit
+
+        def counting_fit(self, data, *args, _orig=orig_fit, _calls=calls, **kwargs):
+            _calls.append(1)
+            return _orig(self, data, *args, **kwargs)
+
+        monkeypatch.setattr(fit_cls, 'fit', counting_fit)
+
+        e.set(epoch_rejection=rej_name, run='1')
+        ctx1 = e._resolve_derivative(node_name)
+        ctx1.load()
+        e.set(run='2')
+        ctx2 = e._resolve_derivative(node_name)
+        ctx2.load()
+
+        assert ctx1.node.path(ctx1) == ctx2.node.path(ctx2), f"{rej_name}: run='1'/run='2' should share one cache slot"
+        assert len(calls) == 1, f"{rej_name}: expected 1 fit() call across both runs, got {len(calls)}"
+
+    # counter-check: BadWindowsRejection still gets a distinct slot per run
+    e.set(epoch_rejection='bad-windows', run='1')
+    ctx1 = e._resolve_derivative('epoch-rejection-bad-windows')
+    e.set(run='2')
+    ctx2 = e._resolve_derivative('epoch-rejection-bad-windows')
+    assert ctx1.node.path(ctx1) != ctx2.node.path(ctx2)
+
+
+@requires_mne_sample_data
 def test_evoked_backed_test_vars_are_post_aggregation_only(samples_experiment):
     set_log_level('warning', 'mne')
     from eelbrain._experiment.tests.sample_experiment import SampleExperiment
