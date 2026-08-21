@@ -725,6 +725,48 @@ def test_ica_all_tasks_after_maxwell(samples_experiment):
 
 
 @requires_mne_sample_data
+def test_ica_explicit_run_concatenation(samples_experiment):
+    "RawICA(run='') concatenates every run for the fit without a RawMaxwell step"
+    set_log_level('warning', 'mne')
+    from eelbrain._experiment.tests.sample_experiment import SampleExperiment
+
+    root = samples_experiment(n_subjects=1, n_segments=1, n_runs=2, pick='eeg')
+
+    class Experiment(SampleExperiment):
+        raw = {
+            '1-40': RawFilter('raw', 1, 40),
+            'ica-all': RawICA('1-40', method='fastica', max_iter=1, n_components=0.9, run=''),
+        }
+
+    e = Experiment(root)
+    assert e._raw['ica-all']._concatenate_runs is True
+    e.set(subject='R0000', raw='ica-all', run='1')
+    # concatenated across runs -> cached per subject/session/acquisition, no run entity
+    assert str(ica_file_path(e.state, 'ica-all', concatenate_runs=True, datatype='eeg')) == join('derivatives', 'mne', 'sub-R0000', 'eeg', 'sub-R0000_desc-ica-all_ica.fif')
+    with catch_warnings():
+        filterwarnings('ignore', 'FastICA did not converge', UserWarning)
+        ica_path = e.make_ica()
+    assert exists(ica_path)
+    assert isinstance(e.load_ica(), mne.preprocessing.ICA)
+    # run='2' resolves to the same (already-fit) ICA, not a separate per-run fit
+    e.set(run='2')
+    with catch_warnings():
+        filterwarnings('ignore', 'FastICA did not converge', UserWarning)
+        assert e.make_ica() == ica_path
+    assert isinstance(e.load_raw(), mne.io.BaseRaw)
+
+    # without run='', the default (no Maxwell) stays single-run, unaffected
+    class DefaultExperiment(SampleExperiment):
+        raw = {
+            '1-40': RawFilter('raw', 1, 40),
+            'ica-default': RawICA('1-40', method='fastica', max_iter=1, n_components=0.9),
+        }
+
+    e_default = DefaultExperiment(root)
+    assert e_default._raw['ica-default']._concatenate_runs is False
+
+
+@requires_mne_sample_data
 def test_epoch_reference(samples_experiment):
     "EEG re-referencing after channel interpolation (the 'reference' state)"
     set_log_level('warning', 'mne')

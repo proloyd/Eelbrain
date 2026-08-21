@@ -523,6 +523,15 @@ class RawICA(CachedRawPipe):
         a different value for ``reject`` is specified here.
     cache : bool
         Cache the resulting raw files (default ``False``).
+    run
+        By default (``None``), all runs are concatenated for the ICA fit only
+        when this step follows a :class:`RawMaxwell` step (see Notes); without
+        Maxwell filtering, only the current run is used. Pass ``run=''`` to
+        explicitly concatenate every run for the current subject/session/
+        acquisition regardless of Maxwell filtering - safe for data where
+        sensor geometry does not change between runs (e.g. EEG, where the cap
+        does not move relative to the head the way a subject can move
+        relative to fixed MEG sensors between runs).
     ...
         Additional parameters for :class:`mne.preprocessing.ICA`.
 
@@ -573,11 +582,12 @@ class RawICA(CachedRawPipe):
             }
 
     """
-    DICT_ATTRS = CachedRawPipe.DICT_ATTRS + ('task', 'kwargs', 'fit_kwargs')
+    DICT_ATTRS = CachedRawPipe.DICT_ATTRS + ('task', 'kwargs', 'fit_kwargs', 'run')
 
     run: str | Sequence[str] = None
     # Whether to concatenate all runs per subject/session/acquisition for the ICA fit.
-    # Resolved during pipeline assembly (True when the step is after RawMaxwell).
+    # Resolved during pipeline assembly (True when the step is after RawMaxwell, or
+    # when the user explicitly requested it via run='').
     _concatenate_runs: bool = False
 
     def __init__(
@@ -588,6 +598,7 @@ class RawICA(CachedRawPipe):
             random_state: int = 0,
             fit_kwargs: dict[str, Any] = None,
             cache: bool = False,
+            run: str | Sequence[str] | None = None,
             **kwargs,
     ):
         CachedRawPipe.__init__(self, source, cache)
@@ -596,6 +607,7 @@ class RawICA(CachedRawPipe):
         self.random_state = random_state
         self.kwargs = {'method': method, 'random_state': random_state, **kwargs}
         self.fit_kwargs = dict(fit_kwargs) if fit_kwargs else {}
+        self.run = run
 
     def path(self, ctx: Request) -> Path:
         return ctx.root / ica_file_path(ctx.state, self.name, self._concatenate_runs, datatype=ctx.datatype)
@@ -1130,9 +1142,13 @@ def assemble_raw_pipes(
                 pipe = pending.pop(key)
                 if isinstance(pipe, RawICA):
                     after_maxwell = any(isinstance(resolved[name], RawMaxwell) for name in lineages[pipe.source])
-                    pipe._concatenate_runs = after_maxwell
+                    # run='' is an explicit user opt-in to concatenate every run
+                    # for the fit, independent of RawMaxwell (safe whenever sensor
+                    # geometry does not change between runs, e.g. EEG).
+                    explicit_concatenate = pipe.run == ''
+                    pipe._concatenate_runs = after_maxwell or explicit_concatenate
                     if pipe.task is None:
-                        if len(tasks) == 1 or after_maxwell:
+                        if len(tasks) == 1 or after_maxwell or explicit_concatenate:
                             pipe.task = tasks
                         else:
                             raise ConfigurationError(f"RawICA {key!r} has task=None but the experiment has {len(tasks)} tasks. Specify task explicitly, or place the ICA step after a RawMaxwell step to use all tasks. Available tasks: {', '.join(tasks)}.")
