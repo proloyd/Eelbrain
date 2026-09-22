@@ -685,6 +685,9 @@ def _resolve_trigger(
         if event_id is None:
             trigger, event_id = _factor_trigger_to_var(trigger)
         else:
+            missing = [cell for cell in trigger.cells if cell not in event_id]
+            if missing:
+                raise KeyError(f"{event_id=} is missing the label(s) {missing} present in the trigger Factor")
             trigger = Var([event_id[label] for label in trigger])
     elif trigger is None and event_id is not None and set(event_id.values()) != {1}:
         # a None trigger assigns every event the same code (1, see

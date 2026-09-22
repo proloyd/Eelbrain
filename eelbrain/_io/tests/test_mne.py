@@ -169,6 +169,12 @@ def test_mne_epochs_event_id():
     assert epochs.event_id == event_id
     assert_array_equal(epochs.events[:, 2], [1, 2, 1])
 
+    # an event_id missing a label present in the trigger Factor raises a
+    # descriptive KeyError naming the missing label(s), not an opaque one
+    # from deep inside epoch construction
+    with pytest.raises(KeyError, match=r"\['b'\]"):
+        load.mne.mne_epochs(ds, -0.05, 0.05, event_id={'a': 1})
+
 
 def test_variable_length_mne_epochs_event_id():
     "variable_length_mne_epochs' event_id handling, generating the synthetic data only once"
