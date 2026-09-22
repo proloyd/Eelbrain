@@ -197,6 +197,13 @@ def test_variable_length_mne_epochs_event_id():
     epochs_list = load.mne.variable_length_mne_epochs(ds, -0.05, tstop=[0.05, 0.05, 0.05], i_start='sample')
     assert [set(epochs.event_id) for epochs in epochs_list] == [{'a'}, {'b'}, {'a'}]
 
+    # an explicit event_id in which two labels share a code keeps both labels
+    # for every epoch with that code (not just whichever label happened to be
+    # inserted last)
+    ds['trigger'] = Factor(['a', 'b', 'c'])
+    epochs_list = load.mne.variable_length_mne_epochs(ds, -0.05, tstop=[0.05, 0.05, 0.05], i_start='sample', event_id={'a': 1, 'b': 1, 'c': 3})
+    assert [epochs.event_id for epochs in epochs_list] == [{'a': 1, 'b': 1}, {'a': 1, 'b': 1}, {'c': 3}]
+
 
 def test_factor_trigger_to_var():
     "_factor_trigger_to_var: numeric codes + a matching event_id"
