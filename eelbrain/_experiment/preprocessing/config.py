@@ -904,6 +904,8 @@ class RawMaxwell(CachedRawPipe):
 
         shared_kwargs = {key: value for key, value in self.kwargs.items() if key in self._shared_kwargs}
         shared_kwargs.update(calibration=calibration, cross_talk=cross_talk, bad_condition=self.bad_condition, coord_frame='head', head_pos=head_pos)
+        origin = raw.info['dev_head_t']['trans'][:3, 3]  if raw.info['dev_head_t'] else 'auto'
+        shared_kwargs.update(origin=origin)
         # find bad channels
         detector_kwargs = {key: value for key, value in self.kwargs.items() if key in self._detector_only_kwargs}
         noisy_chs, flat_chs = mne.preprocessing.find_bad_channels_maxwell(raw, h_freq=self.h_freq, verbose=MNE_VERBOSITY, **shared_kwargs, **detector_kwargs)
