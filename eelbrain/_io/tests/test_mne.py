@@ -1,6 +1,7 @@
 # Author: Christian Brodbeck <christianbrodbeck@nyu.edu>
 import os
 from pathlib import Path
+import warnings
 
 import mne
 from mne import pick_types
@@ -156,6 +157,14 @@ def test_mne_epochs_event_id():
         epochs = load.mne.mne_epochs(ds, -0.05, 0.05, trigger=None, event_id={'a': 5})
     assert epochs.event_id == {'1': 1}
 
+    # an empty event_id carries no information, so it is treated like None:
+    # no spurious warning, and mne's own default event_id is used (passing
+    # {} through to mne.Epochs unchanged would otherwise raise an opaque error)
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        epochs = load.mne.mne_epochs(ds, -0.05, 0.05, trigger=None, event_id={})
+    assert epochs.event_id == {'1': 1}
+
     # a Factor-valued trigger is converted to a numeric code + event_id automatically
     ds['trigger'] = Factor(['a', 'b', 'a'])
     epochs = load.mne.mne_epochs(ds, -0.05, 0.05)
@@ -174,6 +183,11 @@ def test_mne_epochs_event_id():
     # from deep inside epoch construction
     with pytest.raises(KeyError, match=r"\['b'\]"):
         load.mne.mne_epochs(ds, -0.05, 0.05, event_id={'a': 1})
+
+    # an empty event_id is treated like None here too: the Factor-valued
+    # trigger is still auto-derived instead of raising a missing-label error
+    epochs = load.mne.mne_epochs(ds, -0.05, 0.05, event_id={})
+    assert set(epochs.event_id) == {'a', 'b'}
 
 
 def test_variable_length_mne_epochs_event_id():

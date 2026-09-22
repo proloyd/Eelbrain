@@ -667,7 +667,9 @@ def _resolve_trigger(
         code 1, see :func:`_mne_events`).
     event_id
         Caller-supplied label -> code mapping, if any. ``None`` unless the
-        caller already knows the codes it wants.
+        caller already knows the codes it wants. An empty dict is treated the
+        same as ``None`` (it carries no information, and passing it through
+        to :class:`mne.Epochs` unchanged raises an opaque error).
 
     Returns
     -------
@@ -675,12 +677,14 @@ def _resolve_trigger(
         The resolved, numeric trigger (or ``None``, unchanged, if ``trigger``
         was ``None``).
     event_id
-        ``event_id``, unchanged, unless it was derived from a Factor-valued
-        ``trigger`` or dropped (with a warning) for being incompatible with a
-        ``None`` trigger.
+        ``event_id``, unchanged, unless it was empty (normalized to
+        ``None``), derived from a Factor-valued ``trigger``, or dropped (with
+        a warning) for being incompatible with a ``None`` trigger.
     """
     if isinstance(trigger, str):
         trigger = ds[trigger]
+    if not event_id:  # an empty dict carries the same (lack of) information as None
+        event_id = None
     if isinstance(trigger, Factor):
         if event_id is None:
             trigger, event_id = _factor_trigger_to_var(trigger)
