@@ -680,6 +680,17 @@ def _resolve_trigger(
         ``event_id``, unchanged, unless it was empty (normalized to
         ``None``), derived from a Factor-valued ``trigger``, or dropped (with
         a warning) for being incompatible with a ``None`` trigger.
+
+    Raises
+    ------
+    KeyError
+        If an explicit ``event_id`` is missing a label present in a
+        Factor-valued ``trigger``.
+    ValueError
+        If an explicit ``event_id`` assigns the same code to two or more
+        labels present in a Factor-valued ``trigger``: :class:`mne.Epochs`
+        does not allow an ``event_id`` with duplicate values, so this would
+        otherwise fail deep inside epoch construction.
     """
     if isinstance(trigger, str):
         trigger = ds[trigger]
@@ -692,6 +703,12 @@ def _resolve_trigger(
             missing = [cell for cell in trigger.cells if cell not in event_id]
             if missing:
                 raise KeyError(f"{event_id=} is missing the label(s) {missing} present in the trigger Factor")
+            labels_of_code = {}
+            for cell in trigger.cells:
+                labels_of_code.setdefault(event_id[cell], []).append(cell)
+            collisions = [labels for labels in labels_of_code.values() if len(labels) > 1]
+            if collisions:
+                raise ValueError(f"{event_id=} assigns the same code to multiple labels {collisions} present in the trigger Factor; mne.Epochs does not allow an event_id with duplicate values")
             trigger = trigger.as_var(event_id)
     elif trigger is None and event_id is not None and set(event_id.values()) != {1}:
         # a None trigger assigns every event the same code (1, see

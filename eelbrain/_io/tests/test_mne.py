@@ -189,6 +189,13 @@ def test_mne_epochs_event_id():
     epochs = load.mne.mne_epochs(ds, -0.05, 0.05, event_id={})
     assert set(epochs.event_id) == {'a', 'b'}
 
+    # an event_id assigning the same code to two labels present in the
+    # trigger Factor raises a clear, early ValueError naming the colliding
+    # labels, instead of failing deep inside mne.Epochs with its own opaque
+    # "duplicate values" error
+    with pytest.raises(ValueError, match=r"\['a', 'b'\]"):
+        load.mne.mne_epochs(ds, -0.05, 0.05, event_id={'a': 1, 'b': 1})
+
 
 def test_variable_length_mne_epochs_event_id():
     "variable_length_mne_epochs' event_id handling, generating the synthetic data only once"
