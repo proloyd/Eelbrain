@@ -1172,12 +1172,8 @@ def variable_length_mne_epochs(
     trigger, event_id = _resolve_trigger(events, trigger, event_id)
     events_array = _mne_events(events, i_start=i_start, trigger=trigger)
     # mne.Epochs requires every event_id value to have a matching event, so
-    # each single-epoch call below only gets the entries for its own code
-    # (kept as a list since multiple labels can share a code, e.g. hierarchical
-    # condition names)
-    labels_of_code = {}
-    for label, code in (event_id or {}).items():
-        labels_of_code.setdefault(code, []).append(label)
+    # each single-epoch call below only gets the one entry for its own code
+    label_of_code = {code: label for label, code in (event_id or {}).items()}
     # Load epochs
     out = []
     for i, (tmin_i, tmax_i) in enumerate(zip(tmin, tmax)):
@@ -1196,10 +1192,9 @@ def variable_length_mne_epochs(
                 missing = (i_max - raw.last_samp) / raw.info['sfreq']
                 raise ValueError(f"{tmax[i]=} is outside of data range by {missing:g} s")
         code_i = events_array[i, 2]
-        if code_i in labels_of_code:
-            event_id_i = {label: code_i for label in labels_of_code[code_i]}
-        else:
-            event_id_i = None
+        event_id_i = None
+        if code_i in label_of_code:
+            event_id_i = {label_of_code[code_i]: code_i}
         epochs_i = mne.Epochs(raw, events_array[i:i + 1], event_id_i, tmin_i, tmax_i, baseline, picks, preload=True, decim=decim, **kwargs)
         out.append(epochs_i)
     return out
