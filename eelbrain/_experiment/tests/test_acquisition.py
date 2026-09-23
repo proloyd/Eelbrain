@@ -123,3 +123,46 @@ def test_ignore_runs_excludes_ica_and_head_position_recordings(tmp_path):
     ctx = SimpleNamespace(state={'subject': '01', 'session': '', 'acquisition': ''})
     states = ica_node._source_states(ctx, ['test'])
     assert {state['run'] for state in states} == {'1', '3'}
+
+
+def test_recordings_preserve_runless_recording_alongside_numbered_runs(tmp_path):
+    """A recording without a run entity must not disappear from
+    Pipeline._recordings merely because another recording in the same
+    dataset has a numbered run.
+
+    Regression test for a bug in the initial fix for ignore_runs (see
+    test_ignore_runs_excludes_ica_and_head_position_recordings above):
+    filtering matching_paths with ``runs=self._runs`` (self._runs being
+    only the explicit run labels found, e.g. ('1', '2')) excluded every
+    recording that has no run entity at all, whenever any numbered run
+    existed elsewhere in the dataset. For a RawICA step that does *not*
+    follow a RawMaxwell step (so it does not concatenate runs, and
+    ICAInput._source_states keys directly on the ambient run state), that
+    made the run-less subject's own recording undiscoverable, raising
+    FileMissingError even though nothing about that subject was ignored.
+    """
+    _write_dataset_description(tmp_path, 'mixed-runs-test')
+    for subject, run in [('01', '1'), ('01', '2'), ('02', None)]:
+        name = f'sub-{subject}_task-test_run-{run}_meg.fif' if run else f'sub-{subject}_task-test_meg.fif'
+        meg_dir = tmp_path / f'sub-{subject}' / 'meg'
+        meg_dir.mkdir(parents=True, exist_ok=True)
+        (meg_dir / name).touch()
+
+    class MixedRunExperiment(Pipeline):
+        stim_channel = 'STI 014'
+        raw = {
+            'ica': RawICA('raw', 'test', method='fastica', n_components=1),
+        }
+
+    experiment = MixedRunExperiment(tmp_path)
+    assert experiment._runs == ('1', '2')
+    assert experiment._recordings == {
+        ('01', '', 'test', '', '1'),
+        ('01', '', 'test', '', '2'),
+        ('02', '', 'test', '', ''),
+    }
+
+    ica_node = experiment._derivatives._nodes[ica_input_name('ica')]
+    assert ica_node.pipe._concatenate_runs is False
+    ctx = SimpleNamespace(state={'subject': '02', 'session': '', 'acquisition': '', 'run': ''})
+    assert ica_node._source_states(ctx, ['test']) == [{'task': 'test', 'run': ''}]
