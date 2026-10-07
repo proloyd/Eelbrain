@@ -722,7 +722,7 @@ def _resolve_trigger(
         # a None trigger assigns every event the same code (1, see
         # _mne_events), so an event_id entry with any other code could never
         # match any event
-        warnings.warn(f"{event_id=} with trigger=None: a None trigger assigns every event the code 1; event_id entries with other codes are ignored")
+        warnings.warn(f"{event_id=} with trigger=None: a None trigger assigns every event the code 1; event_id entries with other codes are ignored", stacklevel=3)
         event_id = {label: code for label, code in event_id.items() if code == 1} or None
     return trigger, event_id
 
