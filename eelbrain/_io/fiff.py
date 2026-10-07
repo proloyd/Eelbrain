@@ -618,7 +618,7 @@ def _factor_trigger_to_var(
 
     MNE events require a numeric (``int32``) trigger/event-ID column, but a
     pipeline's trigger column can end up as a :class:`Factor` (e.g. via
-    :meth:`~Pipeline.label_events` or a :class:`~variable_def.LabelVar`).
+    :meth:`~Pipeline.label_events` or a :class:`~eelbrain._experiment.variable_def.LabelVar`).
 
     Parameters
     ----------
@@ -796,14 +796,14 @@ def mne_epochs(
         have 50 samples.
     trigger
         Name of the variable containing the integer event ID (trigger code).
-        If this variable is a :class:`~eelbrain._data_obj.Factor` (e.g. from
+        If this variable is a :class:`Factor` (e.g. from
         a pipeline's ``label_events``), it is converted to a stable numeric
         code automatically (see ``event_id``).
     event_id
         Mapping from condition label to trigger code, stored on the
         resulting :class:`mne.Epochs` as its ``event_id`` (passed through to
         :class:`mne.Epochs`). If ``None`` and ``trigger`` resolves to a
-        :class:`~eelbrain._data_obj.Factor`, this is derived automatically
+        :class:`Factor`, this is derived automatically
         from the Factor's own labels; otherwise MNE derives its own from the
         trigger codes. With ``trigger=None`` (every event gets the code 1),
         ``event_id`` entries declaring any other code are ignored (with a
@@ -1154,7 +1154,7 @@ def variable_length_mne_epochs(
         Name of the variable containing the sample index of each event.
     trigger
         Name of the variable containing the integer event ID (trigger code).
-        If this variable is a :class:`~eelbrain._data_obj.Factor` (e.g. from
+        If this variable is a :class:`Factor` (e.g. from
         a pipeline's ``label_events``), it is converted to a stable numeric
         code automatically (see ``event_id``).
     event_id
@@ -1163,7 +1163,7 @@ def variable_length_mne_epochs(
         keeps the one entry matching its own trigger code, since
         :class:`mne.Epochs` requires every ``event_id`` value to have a
         matching event). If ``None`` and ``trigger`` resolves to a
-        :class:`~eelbrain._data_obj.Factor`, this is derived automatically
+        :class:`Factor`, this is derived automatically
         from the Factor's own labels. With ``trigger=None`` (every event
         gets the code 1), ``event_id`` entries declaring any other code are
         ignored (with a warning), since they could never match an event.
