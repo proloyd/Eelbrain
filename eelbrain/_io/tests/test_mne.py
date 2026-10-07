@@ -280,7 +280,7 @@ def test_factor_trigger_to_var():
 
     # two labels that hash to the same CRC32 code raise instead of silently merging
     factor = Factor(['ze4sErsGQplO', 'aR0uxf58kQj3'])
-    with pytest.raises(RuntimeError):
+    with pytest.raises(ValueError):
         _factor_trigger_to_var(factor)
 
 

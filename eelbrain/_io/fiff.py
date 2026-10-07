@@ -610,36 +610,58 @@ def add_mne_epochs(
     return ds
 
 
-def _factor_trigger_to_var(factor: Factor) -> tuple[Var, dict[str, int]]:
+def _factor_trigger_to_var(
+        factor: Factor,
+        event_id: dict[str, int] = None,
+) -> tuple[Var, dict[str, int]]:
     """Numeric trigger codes for a Factor, stable across recordings.
 
     MNE events require a numeric (``int32``) trigger/event-ID column, but a
     pipeline's trigger column can end up as a :class:`Factor` (e.g. via
     :meth:`~Pipeline.label_events` or a :class:`~variable_def.LabelVar`).
-    Each label's code is derived from the label's own text (CRC32), not from
-    which other values happen to co-occur in a given recording, so the same
-    label always maps to the same code across different runs/recordings
-    without requiring a shared/external registry.
 
-    Also returns the label -> code mapping, for use as the ``event_id`` of
-    the resulting :class:`mne.Epochs`, so the original string labels remain
-    available to code that works with the raw ``mne.Epochs`` object directly.
+    Parameters
+    ----------
+    factor
+        The Factor-valued trigger.
+    event_id
+        Caller-supplied label -> code mapping; must contain every label
+        present in ``factor``. By default, each label's code is derived from
+        the label's own text (CRC32), not from which other values happen to
+        co-occur in a given recording, so the same label always maps to the
+        same code across different runs/recordings without requiring a
+        shared/external registry.
+
+    Returns
+    -------
+    trigger
+        The numeric trigger codes.
+    event_id
+        The label -> code mapping (``event_id`` if given, otherwise the
+        derived one), for use as the ``event_id`` of the resulting
+        :class:`mne.Epochs`, so the original string labels remain available
+        to code that works with the raw ``mne.Epochs`` object directly.
 
     Raises
     ------
-    RuntimeError
-        If two distinct labels hash to the same code (astronomically
-        unlikely for realistic label counts, but would otherwise silently
-        merge two different conditions into one ``event_id``).
+    KeyError
+        If ``event_id`` is missing a label present in ``factor``.
+    ValueError
+        If two labels present in ``factor`` are assigned the same code:
+        :class:`mne.Epochs` does not allow an ``event_id`` with duplicate
+        values. For the CRC32-derived codes this is astronomically unlikely,
+        but would otherwise silently merge two different conditions.
     """
-    code_of = {label: zlib.crc32(label.encode()) & 0x7FFFFFFF for label in factor.cells}  # mask to a non-negative value that fits in int32
-    if len(set(code_of.values())) != len(code_of):
-        codes = {}
-        for label, code in code_of.items():
-            codes.setdefault(code, []).append(label)
-        collisions = [labels for labels in codes.values() if len(labels) > 1]
-        raise RuntimeError(f"CRC32 collision between trigger labels {collisions}: these would be assigned the same numeric code")
-    return factor.as_var(code_of), code_of
+    if event_id is None:
+        event_id = {label: zlib.crc32(label.encode()) & 0x7FFFFFFF for label in factor.cells}  # mask to a non-negative value that fits in int32
+    elif missing := [label for label in factor.cells if label not in event_id]:
+        raise KeyError(f"{event_id=} is missing the label(s) {missing} present in the trigger Factor")
+    labels_of_code = {}
+    for label in factor.cells:
+        labels_of_code.setdefault(event_id[label], []).append(label)
+    if collisions := [labels for labels in labels_of_code.values() if len(labels) > 1]:
+        raise ValueError(f"Trigger labels {collisions} are assigned the same numeric code ({event_id=}); mne.Epochs does not allow an event_id with duplicate values")
+    return factor.as_var(event_id), event_id
 
 
 def _resolve_trigger(
@@ -687,29 +709,15 @@ def _resolve_trigger(
         If an explicit ``event_id`` is missing a label present in a
         Factor-valued ``trigger``.
     ValueError
-        If an explicit ``event_id`` assigns the same code to two or more
-        labels present in a Factor-valued ``trigger``: :class:`mne.Epochs`
-        does not allow an ``event_id`` with duplicate values, so this would
-        otherwise fail deep inside epoch construction.
+        If two labels present in a Factor-valued ``trigger`` are assigned the
+        same code (see :func:`_factor_trigger_to_var`).
     """
     if isinstance(trigger, str):
         trigger = ds[trigger]
     if not event_id:  # an empty dict carries the same (lack of) information as None
         event_id = None
     if isinstance(trigger, Factor):
-        if event_id is None:
-            trigger, event_id = _factor_trigger_to_var(trigger)
-        else:
-            missing = [cell for cell in trigger.cells if cell not in event_id]
-            if missing:
-                raise KeyError(f"{event_id=} is missing the label(s) {missing} present in the trigger Factor")
-            labels_of_code = {}
-            for cell in trigger.cells:
-                labels_of_code.setdefault(event_id[cell], []).append(cell)
-            collisions = [labels for labels in labels_of_code.values() if len(labels) > 1]
-            if collisions:
-                raise ValueError(f"{event_id=} assigns the same code to multiple labels {collisions} present in the trigger Factor; mne.Epochs does not allow an event_id with duplicate values")
-            trigger = trigger.as_var(event_id)
+        trigger, event_id = _factor_trigger_to_var(trigger, event_id)
     elif trigger is None and event_id is not None and set(event_id.values()) != {1}:
         # a None trigger assigns every event the same code (1, see
         # _mne_events), so an event_id with any other code could never
