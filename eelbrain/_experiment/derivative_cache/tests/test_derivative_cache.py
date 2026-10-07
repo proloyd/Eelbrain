@@ -903,7 +903,7 @@ def test_registry_logs_cache_events(caplog):
     manifest = json.loads(manifest_path.read_text())
     assert manifest['derivative'] == 'value'
     assert manifest['key'] == {'subject': 's1'}
-    assert manifest['dependencies']['source']['kind'] == 'input'
+    assert 'key' not in manifest['dependencies']['source']  # inputs have no artifact
 
 
 def test_recompute_logs_invalidation_reason(caplog):
@@ -1101,20 +1101,33 @@ def test_uncached_derivative_rebuilds_every_time():
         handle.manifest_path
 
 
+def test_dep_entry_matches_after_caching_node():
+    "A dependency recorded while its node was uncached (no key) stays valid once the node is cached"
+    from eelbrain._experiment.derivative_cache.base import _dep_entry_matches
+
+    stored = {'name': 'pos', 'fingerprint': {'a': 1}, 'dependencies': {}}
+    current = {**stored, 'key': {'subject': 's1'}, 'manifest': 'pos/pos.json'}
+    assert _dep_entry_matches(stored, current)
+    assert not _dep_entry_matches(stored, {**current, 'fingerprint': {'a': 2}})
+    # a recorded key still has to match
+    assert not _dep_entry_matches({**stored, 'key': {'subject': 's0'}}, current)
+    assert _dep_entry_matches(current, current)
+
+
 def test_registry_resolve_returns_request_for_input_and_derivative():
     _, registry, _, _, _, _, _, _, _root = make_registry()
 
     handle = registry.resolve('source', state=DEFAULT_STATE)
     assert isinstance(handle, Request)
     assert handle.describe_dependency()['name'] == 'source'
-    assert handle.describe_dependency()['kind'] == 'input'
+    assert 'key' not in handle.describe_dependency()
     with pytest.raises(TypeError, match="input 'source'"):
         _ = handle.artifact_path
 
     value_handle = registry.resolve('value', state=DEFAULT_STATE)
     assert isinstance(value_handle, Request)
     assert value_handle.describe_dependency()['name'] == 'value'
-    assert value_handle.describe_dependency()['kind'] == 'derivative'
+    assert value_handle.describe_dependency()['key'] == value_handle.key()
     # the manifest path is recorded relative to the cache dir (portable across a moved root)
     assert value_handle.describe_dependency()['manifest'] == value_handle.manifest_path.relative_to(registry.cache_dir).as_posix()
 
@@ -1660,6 +1673,18 @@ class DownstreamDerivative(Derivative[str]):
         Path(path).write_text(value)
 
 
+class ArtifactFingerprintDerivative(ConfiguredDerivative):
+    """Dependents see the built artifact's metadata rather than the configuration (like the regularization actually applied to a covariance)."""
+    dependency_fingerprint_from_artifact = True
+
+    def artifact_metadata(self, ctx: Request, value: str) -> dict[str, object]:
+        return {'length': len(value)}
+
+    def dependency_fingerprint(self, ctx: Request, view: str | None = None) -> dict[str, object]:
+        ctx.ensure()
+        return dict(ctx.artifact_metadata)
+
+
 class DirArtifactDerivative(Derivative[str]):
     """Derivative whose artifact is a directory containing several files."""
     name = 'dir-artifact'
@@ -1988,6 +2013,33 @@ def test_gc_stale_dependency_after_child_rebuild():
     report.collect()
     assert not downstream_ctx.artifact_path.exists()
     assert registry.resolve('configured', state=DEFAULT_STATE).is_valid()
+
+
+def test_gc_stale_artifact_fingerprint_dependency():
+    "Dependents of a stale node whose dependency fingerprint comes from its artifact are kept as unverifiable"
+    root, registry, _ = make_source_registry()
+    configured = ArtifactFingerprintDerivative(root)
+    registry.register(configured)
+    registry.register(DownstreamDerivative(root))
+    downstream_ctx = registry.resolve('downstream', state=DEFAULT_STATE)
+    downstream_ctx.load()
+    configured.config = 'b'  # same artifact length as 'a'
+    report = registry.scan_cache()
+    _single_entry(report, GCCategory.REVALIDATION_STALE)
+    entry = _single_entry(report, GCCategory.UNVERIFIABLE)
+    assert entry.path == downstream_ctx.artifact_path
+    assert 'configured' in entry.reason
+    report.collect()
+    assert downstream_ctx.artifact_path.exists()
+    # rebuilt with the same artifact-level fingerprint, the dependent stays valid
+    registry.resolve('configured', state=DEFAULT_STATE).load()
+    assert registry.scan_cache().entries == []
+    assert downstream_ctx.is_valid()
+    # a rebuild that changes the artifact-level fingerprint invalidates the dependent through normal validation
+    configured.config = 'ccc'
+    registry.resolve('configured', state=DEFAULT_STATE).load()
+    entry = _single_entry(registry.scan_cache(), GCCategory.REVALIDATION_STALE)
+    assert entry.path == downstream_ctx.artifact_path
 
 
 def test_gc_directory_artifact():
