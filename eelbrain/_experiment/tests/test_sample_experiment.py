@@ -1869,10 +1869,8 @@ def test_recording_epochs_factor_valued_trigger(samples_experiment):
 
 
 @requires_mne_sample_data
-def test_epochs_with_cached_recording_use_current_selected_events(
-    samples_experiment,
-):
-    set_log_level("warning", "mne")
+def test_epochs_with_cached_recording_use_current_selected_events(samples_experiment):
+    set_log_level('warning', 'mne')
     from eelbrain._experiment.tests.sample_experiment_sessions import SampleExperiment
 
     class CachedEpochsExperiment(SampleExperiment):

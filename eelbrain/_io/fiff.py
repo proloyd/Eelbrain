@@ -748,10 +748,10 @@ def mne_epochs(
         drop_bad_chs: bool = True,
         picks: Sequence[str] = None,
         reject: float = None,
-        decim: int = 1,
         tstop: float = None,
+        decim: int = 1,
         trigger: str = 'trigger',
-        event_id: dict = None,
+        event_id: dict[str, int] = None,
         **kwargs,
 ):
     """Load epochs as :class:`mne.Epochs`.
@@ -791,7 +791,7 @@ def mne_epochs(
         If this variable is a :class:`~eelbrain._data_obj.Factor` (e.g. from
         a pipeline's ``label_events``), it is converted to a stable numeric
         code automatically (see ``event_id``).
-    event_id : dict | None
+    event_id
         Mapping from condition label to trigger code, stored on the
         resulting :class:`mne.Epochs` as its ``event_id`` (passed through to
         :class:`mne.Epochs`). If ``None`` and ``trigger`` resolves to a
@@ -1134,6 +1134,7 @@ def variable_length_mne_epochs(
         For example, at 100 Hz the epoch with ``tmin=-0.1, tmax=0.4`` will have
         51 samples, while the epoch specified with ``tmin=-0.1, tstop=0.4`` will
         have 50 samples.
+        Can be :class:`str` referencing a variable in ``events``.
     picks
         Channels to include (:class:`mne.Epochs` parameter). By default, all
         channels are included; if ``raw`` has bad channels, MEG, EEG and EOG
@@ -1148,7 +1149,6 @@ def variable_length_mne_epochs(
         If this variable is a :class:`~eelbrain._data_obj.Factor` (e.g. from
         a pipeline's ``label_events``), it is converted to a stable numeric
         code automatically (see ``event_id``).
-        Can be :class:`str` referencing a variable in ``events``.
     event_id
         Mapping from condition label to trigger code, stored on each
         resulting :class:`mne.Epochs` as its ``event_id`` (each epoch only
@@ -1209,9 +1209,10 @@ def variable_length_mne_epochs(
                 missing = (i_max - raw.last_samp) / raw.info['sfreq']
                 raise ValueError(f"{tmax[i]=} is outside of data range by {missing:g} s")
         code_i = events_array[i, 2]
-        event_id_i = None
         if code_i in label_of_code:
             event_id_i = {label_of_code[code_i]: code_i}
+        else:
+            event_id_i = None
         epochs_i = mne.Epochs(raw, events_array[i:i + 1], event_id_i, tmin_i, tmax_i, baseline, picks, preload=True, decim=decim, **kwargs)
         out.append(epochs_i)
     return out
