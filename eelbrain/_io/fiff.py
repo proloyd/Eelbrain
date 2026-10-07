@@ -700,8 +700,8 @@ def _resolve_trigger(
         was ``None``).
     event_id
         ``event_id``, unchanged, unless it was empty (normalized to
-        ``None``), derived from a Factor-valued ``trigger``, or dropped (with
-        a warning) for being incompatible with a ``None`` trigger.
+        ``None``), derived from a Factor-valued ``trigger``, or reduced (with
+        a warning) to the entries compatible with a ``None`` trigger.
 
     Raises
     ------
@@ -720,10 +720,10 @@ def _resolve_trigger(
         trigger, event_id = _factor_trigger_to_var(trigger, event_id)
     elif trigger is None and event_id is not None and set(event_id.values()) != {1}:
         # a None trigger assigns every event the same code (1, see
-        # _mne_events), so an event_id with any other code could never
+        # _mne_events), so an event_id entry with any other code could never
         # match any event
-        warnings.warn(f"{event_id=} with trigger=None: a None trigger assigns every event the code 1, which does not match the code(s) in event_id; event_id is ignored")
-        event_id = None
+        warnings.warn(f"{event_id=} with trigger=None: a None trigger assigns every event the code 1; event_id entries with other codes are ignored")
+        event_id = {label: code for label, code in event_id.items() if code == 1} or None
     return trigger, event_id
 
 
@@ -806,8 +806,8 @@ def mne_epochs(
         :class:`~eelbrain._data_obj.Factor`, this is derived automatically
         from the Factor's own labels; otherwise MNE derives its own from the
         trigger codes. With ``trigger=None`` (every event gets the code 1),
-        an ``event_id`` declaring any other code is ignored (with a
-        warning), since it could never match an event.
+        ``event_id`` entries declaring any other code are ignored (with a
+        warning), since they could never match an event.
     ...
         :class:`mne.Epochs` parameters.
     """
@@ -1165,8 +1165,8 @@ def variable_length_mne_epochs(
         matching event). If ``None`` and ``trigger`` resolves to a
         :class:`~eelbrain._data_obj.Factor`, this is derived automatically
         from the Factor's own labels. With ``trigger=None`` (every event
-        gets the code 1), an ``event_id`` declaring any other code is
-        ignored (with a warning), since it could never match an event.
+        gets the code 1), ``event_id`` entries declaring any other code are
+        ignored (with a warning), since they could never match an event.
     ...
         :class:`mne.Epochs` parameters.
 

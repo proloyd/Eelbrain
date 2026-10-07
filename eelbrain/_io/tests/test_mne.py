@@ -147,12 +147,12 @@ def test_mne_epochs_event_id():
     assert epochs.event_id == {'a': 1}
     assert_array_equal(epochs.events[:, 2], [1, 1, 1])
 
-    # trigger=None assigns every event the same code (1); an event_id
-    # declaring any other code could never match an event, so it is ignored
-    # (with a warning) instead of failing deep inside mne.Epochs
+    # trigger=None assigns every event the same code (1); event_id entries
+    # declaring any other code could never match an event, so they are
+    # ignored (with a warning) instead of failing deep inside mne.Epochs
     with pytest.warns(UserWarning):
         epochs = load.mne.mne_epochs(ds, -0.05, 0.05, trigger=None, event_id={'a': 1, 'b': 2})
-    assert epochs.event_id == {'1': 1}
+    assert epochs.event_id == {'a': 1}
     with pytest.warns(UserWarning):
         epochs = load.mne.mne_epochs(ds, -0.05, 0.05, trigger=None, event_id={'a': 5})
     assert epochs.event_id == {'1': 1}
@@ -217,7 +217,7 @@ def test_variable_length_mne_epochs_event_id():
     # same trigger=None/event_id mismatch guard as mne_epochs
     with pytest.warns(UserWarning):
         epochs_list = load.mne.variable_length_mne_epochs(ds, -0.05, tstop=[0.05, 0.05, 0.05], i_start='sample', trigger=None, event_id={'a': 1, 'b': 2})
-    assert [epochs.event_id for epochs in epochs_list] == [{'1': 1}, {'1': 1}, {'1': 1}]
+    assert [epochs.event_id for epochs in epochs_list] == [{'a': 1}, {'a': 1}, {'a': 1}]
 
     # a Factor-valued trigger is converted automatically for variable-length epochs too
     ds['trigger'] = Factor(['a', 'b', 'a'])
