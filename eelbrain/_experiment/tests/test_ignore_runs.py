@@ -2,8 +2,11 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from eelbrain import Pipeline
-from eelbrain.pipeline import RawICA, RawMaxwell
+from eelbrain.pipeline import PrimaryEpoch, RawICA, RawMaxwell
+from eelbrain._exceptions import ConfigurationError
 from eelbrain._experiment.preprocessing import ica_input_name
 
 
@@ -53,6 +56,12 @@ def test_ignore_runs_excludes_ica_and_head_position_recordings(tmp_path):
     states = ica_node._source_states(ctx, ['test'])
     assert {state['run'] for state in states} == {'1', '3'}
 
+    class PinnedRunExperiment(IgnoreRunExperiment):
+        epochs = {'r2': PrimaryEpoch('test', tmax=0.3, run='2')}
+
+    with pytest.raises(ConfigurationError, match="run='2' is not available"):
+        PinnedRunExperiment(tmp_path)
+
 
 def test_recordings_preserve_runless_recording_alongside_numbered_runs(tmp_path):
     """A recording without a run entity must not disappear from
@@ -95,3 +104,18 @@ def test_recordings_preserve_runless_recording_alongside_numbered_runs(tmp_path)
     assert ica_node.pipe._concatenate_runs is False
     ctx = SimpleNamespace(state={'subject': '02', 'session': '', 'acquisition': '', 'run': ''})
     assert ica_node._source_states(ctx, ['test']) == [{'task': 'test', 'run': ''}]
+
+
+def test_pinned_run_without_runs(tmp_path):
+    """An epoch pinned to a run is rejected when the dataset has no run entity"""
+    _write_dataset_description(tmp_path, 'no-runs-test')
+    meg_dir = tmp_path / 'sub-01' / 'meg'
+    meg_dir.mkdir(parents=True)
+    (meg_dir / 'sub-01_task-test_meg.fif').touch()
+
+    class PinnedRunExperiment(Pipeline):
+        stim_channel = 'STI 014'
+        epochs = {'r1': PrimaryEpoch('test', tmax=0.3, run='1')}
+
+    with pytest.raises(ConfigurationError, match="run='1' is not available"):
+        PinnedRunExperiment(tmp_path)

@@ -368,7 +368,7 @@ class Pipeline(StateModel):
         self._variables._check_group_vars(self._groups, 'Pipeline.variables')
 
         # epochs
-        self._epochs = ConfigurationDict('epoch', assemble_epochs(self.epochs, self._tasks))
+        self._epochs = ConfigurationDict('epoch', assemble_epochs(self.epochs, self._tasks, self._runs))
 
         # epoch rejection; 'manual' is always available, '' selects no rejection
         epoch_rejection: dict[str, EpochRejection | None] = {'': None}

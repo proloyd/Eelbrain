@@ -2175,6 +2175,8 @@ def test_epoch_run(samples_experiment):
     # exactly Pipeline._runs_for).
     class IgnoreRunExperiment(MultiRunExperiment):
         ignore_entities = {'ignore_runs': ('2',)}
+        # epochs pinned to the ignored run are rejected at initialization
+        epochs = {name: epoch for name, epoch in MultiRunExperiment.epochs.items() if not name.endswith('-r2')}
 
     e_ignore = IgnoreRunExperiment(root)
     assert e_ignore._runs == ('1', '3')
