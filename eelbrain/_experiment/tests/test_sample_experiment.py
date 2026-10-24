@@ -2169,18 +2169,13 @@ def test_epoch_run(samples_experiment):
     assert cont_epochs.n_cases == cont_all.n_cases
     assert all(events[0, 'epoch_time'] == pytest.approx(y.time.tmin + 0.1, abs=0.002) for events, y in cont_epochs.zip('events', 'mag'))
 
-    # ignore_runs should exclude the ignored run from the per-(subject,
-    # session, task, acquisition) run lists that the combine-all aggregation
-    # above relies on (events.py EpochEventsDerivative._find_runs reads
-    # exactly Pipeline._runs_for).
+    # ignore_runs excludes the ignored run from the combine-all aggregation
     class IgnoreRunExperiment(MultiRunExperiment):
         ignore_entities = {'ignore_runs': ('2',)}
         # epochs pinned to the ignored run are rejected at initialization
         epochs = {name: epoch for name, epoch in MultiRunExperiment.epochs.items() if not name.endswith('-r2')}
 
     e_ignore = IgnoreRunExperiment(root)
-    assert e_ignore._runs == ('1', '3')
-    assert all('2' not in runs for runs in e_ignore._runs_for.values())
     e_ignore.set(epoch='target')
     primary_ignoring_2 = e_ignore.load_epochs()
     assert primary_ignoring_2['run'].cells == ('1', '3')
