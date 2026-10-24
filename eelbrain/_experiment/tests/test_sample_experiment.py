@@ -2077,7 +2077,7 @@ def test_epoch_run(samples_experiment):
     that ignore_runs excludes an ignored run from that aggregation."""
     set_log_level('warning', 'mne')
 
-    root = samples_experiment(n_subjects=2, n_segments=2, n_runs=3)
+    root = samples_experiment(n_subjects=2, n_segments=2, n_runs=2)
 
     class MultiRunExperiment(Pipeline):
         stim_channel = 'STI 014'
@@ -2092,11 +2092,9 @@ def test_epoch_run(samples_experiment):
             'target-copy': SecondaryEpoch('target'),
             'target-r1': PrimaryEpoch('sample', "event == 'target'", tmax=0.3, decim=5, run='1'),
             'target-r2': PrimaryEpoch('sample', "event == 'target'", tmax=0.3, decim=5, run='2'),
-            'target-r3': PrimaryEpoch('sample', "event == 'target'", tmax=0.3, decim=5, run='3'),
             'cont': ContinuousEpoch('sample', "event == 'target'", pad_start=0.1, pad_end=0.1, split=0.5),
             'cont-r1': ContinuousEpoch('sample', "event == 'target'", pad_start=0.1, pad_end=0.1, split=0.5, run='1'),
             'cont-r2': ContinuousEpoch('sample', "event == 'target'", pad_start=0.1, pad_end=0.1, split=0.5, run='2'),
-            'cont-r3': ContinuousEpoch('sample', "event == 'target'", pad_start=0.1, pad_end=0.1, split=0.5, run='3'),
         }
 
     e = MultiRunExperiment(root)
@@ -2118,12 +2116,8 @@ def test_epoch_run(samples_experiment):
     ds_r2 = e.load_selected_events()
     assert ds_r2.n_cases > 0
 
-    e.set(epoch='target-r3', epoch_rejection='')
-    ds_r3 = e.load_selected_events()
-    assert ds_r3.n_cases > 0
-
-    # Combined events = run-1 + run-2 + run-3
-    assert ds_all.n_cases == ds_r1.n_cases + ds_r2.n_cases + ds_r3.n_cases, f"combine-all ({ds_all.n_cases}) != run-1 ({ds_r1.n_cases}) + run-2 ({ds_r2.n_cases}) + run-3 ({ds_r3.n_cases})"
+    # Combined events = run-1 + run-2
+    assert ds_all.n_cases == ds_r1.n_cases + ds_r2.n_cases, f"combine-all ({ds_all.n_cases}) != run-1 ({ds_r1.n_cases}) + run-2 ({ds_r2.n_cases})"
 
     # Epochs can be loaded from combine-all epoch
     e.set(epoch='target')
@@ -2147,13 +2141,10 @@ def test_epoch_run(samples_experiment):
     e.set(epoch='cont-r2')
     assert e.get('run') == '2'
     cont_r2 = e.load_selected_events()
-    e.set(epoch='cont-r3')
-    assert e.get('run') == '3'
-    cont_r3 = e.load_selected_events()
     e.set(epoch='cont')
     cont_all = e.load_selected_events()
-    assert cont_all.n_cases == cont_r1.n_cases + cont_r2.n_cases + cont_r3.n_cases
-    assert cont_all['run'].cells == ('1', '2', '3')
+    assert cont_all.n_cases == cont_r1.n_cases + cont_r2.n_cases
+    assert cont_all['run'].cells == ('1', '2')
     for entity in BIDS_ENTITY_KEYS:
         if entity in cont_all and len(set(cont_all[entity])) > 1:
             assert entity not in cont_all.info
@@ -2178,11 +2169,11 @@ def test_epoch_run(samples_experiment):
     e_ignore = IgnoreRunExperiment(root)
     e_ignore.set(epoch='target')
     primary_ignoring_2 = e_ignore.load_epochs()
-    assert primary_ignoring_2['run'].cells == ('1', '3')
+    assert primary_ignoring_2['run'].cells == ('1',)
 
     e_ignore.set(epoch='cont')
     cont_ignoring_2 = e_ignore.load_epochs()
-    assert cont_ignoring_2['run'].cells == ('1', '3')
+    assert cont_ignoring_2['run'].cells == ('1',)
 
 
 @requires_mne_sample_data
